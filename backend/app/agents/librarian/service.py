@@ -98,9 +98,9 @@ class LibrarianService:
         )
 
         # =========================================================
-        # 🚨 [NEW] TRIGGER ACTUAL SONARQUBE SCANNER BEFORE MAPPING
+        # 🚨 SONARQUBE SCANNER REMOVED FROM INITIAL INGESTION
+        # It is now triggered independently via trigger_sonar_scan
         # =========================================================
-        sonar.run_scanner(project_path=root_path, project_key=repo_name)
 
         # =========================================================
         # PASS 1: SCAN & MAP
@@ -234,6 +234,62 @@ class LibrarianService:
             project_root=os.path.abspath(root_path) 
         )
         
+    def trigger_sonar_scan(self, input_source: str, branch: str = "main") -> Dict[str, Any]:
+        """Triggers the SonarQube scanner for a given repository."""
+        repo_name = input_source.rstrip("/").split("/")[-1].replace(".git", "")
+        
+        # Determine the root path of the project
+        if input_source.startswith("http"):
+            path = os.path.join(settings.REPO_STORAGE_PATH, repo_name)
+            if not os.path.exists(path):
+                # If it doesn't exist, clone it first
+                path = self._clone_repo(input_source, branch)
+        else:
+            path = input_source # Local path from Architect
+            
+        # Alert that scan has started
+        alert_system.add_alert(
+            title=f"Security Scan Started",
+            message=f"Deep analysis for '{repo_name}' is running in the background.",
+            severity="info"
+        )
+        
+        # Run the actual scanner
+        success = sonar.run_scanner(project_path=path, project_key=repo_name)
+        
+        if success:
+            system_metrics = sonar.get_project_metrics(project_key=repo_name)
+            bugs = system_metrics.get("bugs", 0)
+            vulns = system_metrics.get("vulnerabilities", 0)
+            
+            if vulns > 0:
+                alert_system.add_alert(
+                    title="Critical Issues Found",
+                    message=f"{repo_name}: Detected {vulns} vulnerabilities during scan. Immediate review required.",
+                    severity="critical"
+                )
+            elif bugs > 10:
+                 alert_system.add_alert(
+                    title="High Bug Count",
+                    message=f"{repo_name}: Analysis found {bugs} potential bugs. Consider checking the health panel.",
+                    severity="warning"
+                )
+            else:
+                alert_system.add_alert(
+                    title="Security Scan Complete",
+                    message=f"SonarQube completed analysis for {repo_name} successfully.",
+                    severity="success"
+                )
+            
+            return {"status": "success", "message": f"Scan completed for {repo_name}"}
+        else:
+            alert_system.add_alert(
+                title="Security Scan Failed",
+                message=f"SonarQube failed to analyze {repo_name}.",
+                severity="critical"
+            )
+            return {"status": "error", "message": f"Scan failed for {repo_name}"}
+            
     def get_file_content(self, full_path: str) -> str:
         """Reads raw file content from disk."""
         if not os.path.exists(full_path):

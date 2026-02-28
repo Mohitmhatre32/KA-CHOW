@@ -152,6 +152,19 @@ export async function analyzeRepository(
 }
 
 /**
+ * Triggers an asynchronous SonarQube scan for a repository.
+ */
+export async function triggerSonarScan(
+  repoUrl: string,
+  branch: string = "main"
+): Promise<{ status: string, message: string }> {
+  return post<{ status: string, message: string }>("/api/librarian/scan/trigger", {
+    input_source: repoUrl,
+    branch
+  })
+}
+
+/**
  * Fetches raw content for a specific file.
  */
 export async function getFileContent(filePath: string): Promise<string> {
@@ -356,4 +369,29 @@ export async function markAllAlertsRead(): Promise<void> {
 export async function clearAlerts(): Promise<void> {
   const res = await fetch(`${BASE_URL}/api/alerts`, { method: "DELETE" })
   if (!res.ok) throw new Error("Failed to clear alerts")
+}
+
+// ─── GitHub OAuth & Repository Selection ──────────────────────────────────────
+
+export interface GithubRepo {
+  id: number
+  name: string
+  full_name: string
+  html_url: string
+  clone_url: string
+  private: boolean
+  description: string | null
+  default_branch: string
+}
+
+export async function getGithubClientId(): Promise<{ client_id: string }> {
+  return get<{ client_id: string }>("/api/github/client-id")
+}
+
+export async function exchangeGithubToken(code: string): Promise<{ access_token: string }> {
+  return post<{ access_token: string }>("/api/github/token", { code })
+}
+
+export async function getUserRepos(token: string): Promise<GithubRepo[]> {
+  return post<GithubRepo[]>("/api/github/repos", { token })
 }

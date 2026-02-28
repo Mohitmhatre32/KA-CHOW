@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { GitBranch, ArrowLeft, Loader2, Check, Github, AlertCircle } from "lucide-react"
-import { analyzeRepository } from "@/lib/api"
+import { GitBranch, ArrowLeft, Loader2, Check, Github, AlertCircle, Book, Lock, Unlock } from "lucide-react"
+import { analyzeRepository, getGithubClientId, getUserRepos, GithubRepo } from "@/lib/api"
 import { upsertRepo, setActiveRepoId, getAllRepos } from "@/lib/repo-store"
 
 const ANALYSIS_STEPS = [
@@ -11,18 +11,27 @@ const ANALYSIS_STEPS = [
   "Parsing file structure...",
   "Analyzing dependencies...",
   "Building dependency graph...",
-  "Running AI analysis...",
   "Finalizing insights...",
 ]
 
-// Advance through steps during the API call (one step every ~3 s), stopping at
-// the second-to-last so the final step is only reached once the API responds.
 const STEP_INTERVAL_MS = 2800
 
 export default function ImportRepositoryPage() {
   const router = useRouter()
-  const [url, setUrl] = useState("")
+
+  // Auth & Repos State
+  const [githubToken, setGithubToken] = useState<string | null>(null)
+  const [clientId, setClientId] = useState<string | null>(null)
+  const [repos, setRepos] = useState<GithubRepo[]>([])
+  const [filteredRepos, setFilteredRepos] = useState<GithubRepo[]>([])
+  const [isFetchingRepos, setIsFetchingRepos] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
+
+  // Selection State
+  const [selectedRepoUrl, setSelectedRepoUrl] = useState("")
   const [branch, setBranch] = useState("main")
+
+  // App State
   const [isLoading, setIsLoading] = useState(false)
   const [currentStep, setCurrentStep] = useState(0)
   const [error, setError] = useState<string | null>(null)
@@ -31,20 +40,76 @@ export default function ImportRepositoryPage() {
 
   useEffect(() => {
     setMounted(true)
+
+    // Check for existing token
+    const token = localStorage.getItem("github_token")
+    if (token) {
+      setGithubToken(token)
+    }
+
+    // Fetch client ID for OAuth
+    getGithubClientId()
+      .then(res => setClientId(res.client_id))
+      .catch(err => console.error("Failed to fetch client ID", err))
+
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current)
     }
   }, [])
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!url.trim()) return
+  useEffect(() => {
+    if (githubToken) {
+      setIsFetchingRepos(true)
+      getUserRepos(githubToken)
+        .then(data => {
+          setRepos(data)
+          setFilteredRepos(data)
+        })
+        .catch(err => {
+          setError("Failed to fetch repositories. Token may be expired.")
+          localStorage.removeItem("github_token")
+          setGithubToken(null)
+        })
+        .finally(() => setIsFetchingRepos(false))
+    }
+  }, [githubToken])
+
+  useEffect(() => {
+    if (searchQuery.trim() === "") {
+      setFilteredRepos(repos)
+    } else {
+      const query = searchQuery.toLowerCase()
+      setFilteredRepos(repos.filter(r => r.full_name.toLowerCase().includes(query)))
+    }
+  }, [searchQuery, repos])
+
+  const handleConnectGithub = () => {
+    if (!clientId) return
+    const redirectUri = `${window.location.origin}/oauth/callback`
+    window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&scope=repo&redirect_uri=${encodeURIComponent(redirectUri)}`
+  }
+
+  const handleDisconnect = () => {
+    localStorage.removeItem("github_token")
+    setGithubToken(null)
+    setRepos([])
+    setFilteredRepos([])
+  }
+
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
+    if (!selectedRepoUrl.trim()) return
 
     setIsLoading(true)
     setCurrentStep(0)
     setError(null)
 
-    // Animate steps forward while the API is in-flight (stop one before the last)
+    // Append OAuth token to URL if we have one to support private repositories seamlessly
+    let finalUrl = selectedRepoUrl.trim()
+    if (githubToken && finalUrl.startsWith("https://github.com/")) {
+      finalUrl = finalUrl.replace("https://github.com/", `https://x-access-token:${githubToken}@github.com/`)
+    }
+
     const PENULTIMATE = ANALYSIS_STEPS.length - 2
     intervalRef.current = setInterval(() => {
       setCurrentStep((prev) => {
@@ -57,18 +122,15 @@ export default function ImportRepositoryPage() {
     }, STEP_INTERVAL_MS)
 
     try {
-      // Call the real backend with optional branch
-      const data = await analyzeRepository(url.trim(), branch.trim() || "main")
+      const data = await analyzeRepository(finalUrl, branch.trim() || "main")
 
-      // Stop the progress interval and jump to last step
       if (intervalRef.current) clearInterval(intervalRef.current)
       setCurrentStep(ANALYSIS_STEPS.length - 1)
 
-      // Upsert into the multi-repo store and make it the active repo
-      const newId = upsertRepo(url.trim(), data)
+      const storeUrl = selectedRepoUrl.trim() // store clean URL without token
+      const newId = upsertRepo(storeUrl, data)
       setActiveRepoId(newId)
 
-      // Short pause so the user sees the final step complete
       setTimeout(() => router.push("/dashboard"), 600)
     } catch (err) {
       if (intervalRef.current) clearInterval(intervalRef.current)
@@ -79,8 +141,7 @@ export default function ImportRepositoryPage() {
   }
 
   return (
-    <main className="relative flex min-h-screen flex-col items-center justify-center bg-background px-6">
-      {/* Back button */}
+    <main className="relative flex min-h-screen flex-col items-center justify-center bg-background px-6 py-12">
       <button
         onClick={() => router.push(getAllRepos().length > 0 ? "/dashboard" : "/")}
         className="absolute left-6 top-6 flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
@@ -89,101 +150,163 @@ export default function ImportRepositoryPage() {
         Back
       </button>
 
-      <div
-        className={`w-full max-w-lg transition-all duration-700 ${mounted ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"
-          }`}
-      >
-        {/* Card */}
+      <div className={`w-full max-w-2xl transition-all duration-700 ${mounted ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"}`}>
         <div className="rounded-xl border border-border bg-card p-8">
-          {/* Header */}
+
           <div className="mb-8 flex flex-col items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-border bg-background">
               <GitBranch className="h-6 w-6 text-primary" />
             </div>
             <h1 className="text-2xl font-semibold text-foreground">Import Your Repository</h1>
             <p className="text-center text-sm text-muted-foreground">
-              Paste a GitHub repository URL to begin analysis
+              {githubToken ? "Select a repository to analyze codebase architecture" : "Connect with GitHub to seamlessly import your repositories"}
             </p>
           </div>
 
-          {/* Error Banner */}
           {error && (
-            <div className="mb-4 flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            <div className="mb-6 flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            <div className="space-y-4">
-              <div className="relative">
-                <Github className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          {!githubToken ? (
+            // Not Authenticated View
+            <div className="flex flex-col items-center justify-center py-6 gap-6">
+              <button
+                onClick={handleConnectGithub}
+                disabled={!clientId}
+                className="flex w-full sm:w-auto items-center justify-center gap-3 rounded-lg bg-foreground text-background py-3 px-8 text-sm font-medium transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Github className="h-5 w-5" />
+                Connect with GitHub
+              </button>
+
+              <div className="flex w-full items-center gap-4 text-sm text-muted-foreground before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border">
+                or use public URL
+              </div>
+
+              <form onSubmit={handleSubmit} className="w-full flex gap-3 flex-col sm:flex-row">
                 <input
                   type="url"
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
                   placeholder="https://github.com/user/repo"
-                  required
+                  value={selectedRepoUrl}
+                  onChange={(e) => setSelectedRepoUrl(e.target.value)}
+                  className="flex-1 rounded-lg border border-border bg-input py-3 px-4 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                   disabled={isLoading}
-                  className="w-full rounded-lg border border-border bg-input py-3 pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
                 />
-              </div>
-
-              <div className="relative">
-                <GitBranch className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  type="text"
-                  value={branch}
-                  onChange={(e) => setBranch(e.target.value)}
-                  placeholder="branch (e.g. main)"
-                  disabled={isLoading}
-                  className="w-full rounded-lg border border-border bg-input py-3 pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
-                />
-              </div>
+                <button
+                  type="submit"
+                  disabled={isLoading || !selectedRepoUrl}
+                  className="rounded-lg bg-primary py-3 px-6 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Import"}
+                </button>
+              </form>
             </div>
+          ) : (
+            // Authenticated View
+            <div className="space-y-6">
+              <div className="flex items-center justify-between border-b border-border pb-4">
+                <div className="flex items-center gap-2 text-sm text-foreground font-medium">
+                  <Github className="h-4 w-4" />
+                  Connected to GitHub
+                </div>
+                <button onClick={handleDisconnect} className="text-xs text-muted-foreground hover:text-destructive transition-colors">
+                  Disconnect
+                </button>
+              </div>
 
-            <button
-              type="submit"
-              disabled={isLoading || !url.trim()}
-              className="mt-2 flex items-center justify-center gap-2 rounded-lg bg-primary py-3 text-sm font-medium text-primary-foreground transition-all duration-300 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Analyzing...
-                </>
+              {isFetchingRepos ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-3">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                  <span className="text-sm text-muted-foreground">Loading your repositories...</span>
+                </div>
               ) : (
-                "Submit"
-              )}
-            </button>
-          </form>
+                <>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Search repositories..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full rounded-lg border border-border bg-input py-2.5 px-4 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
 
-          {/* Loading Steps */}
+                  <div className="max-h-64 overflow-y-auto rounded-lg border border-border p-1 space-y-1">
+                    {filteredRepos.length === 0 ? (
+                      <div className="py-8 text-center text-sm text-muted-foreground">
+                        No repositories found.
+                      </div>
+                    ) : (
+                      filteredRepos.map((repo) => (
+                        <button
+                          key={repo.id}
+                          onClick={() => setSelectedRepoUrl(repo.clone_url)}
+                          className={`w-full flex items-center justify-between p-3 rounded-md transition-colors text-left ${selectedRepoUrl === repo.clone_url ? 'bg-primary/10 border-primary border' : 'hover:bg-secondary border border-transparent'}`}
+                          disabled={isLoading}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`p-1.5 rounded-md ${repo.private ? "bg-amber-500/10 text-amber-500" : "bg-emerald-500/10 text-emerald-500"}`}>
+                              {repo.private ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-foreground">{repo.full_name}</p>
+                              {repo.description && <p className="text-xs text-muted-foreground truncate max-w-xs">{repo.description}</p>}
+                            </div>
+                          </div>
+                          {selectedRepoUrl === repo.clone_url && <Check className="h-4 w-4 text-primary" />}
+                        </button>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="flex gap-4">
+                    <input
+                      type="text"
+                      value={branch}
+                      onChange={(e) => setBranch(e.target.value)}
+                      placeholder="branch (e.g. main)"
+                      disabled={isLoading}
+                      className="w-1/3 rounded-lg border border-border bg-input py-3 px-4 text-sm focus:border-primary focus:outline-none"
+                    />
+
+                    <button
+                      onClick={() => handleSubmit()}
+                      disabled={isLoading || !selectedRepoUrl}
+                      className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-primary py-3 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90 disabled:opacity-50"
+                    >
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Processing...
+                        </>
+                      ) : (
+                        "Import Selected Repository"
+                      )}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
           {isLoading && (
-            <div className="mt-6 flex flex-col gap-2 border-t border-border pt-6">
+            <div className="mt-8 flex flex-col gap-3 border-t border-border pt-6">
               {ANALYSIS_STEPS.map((step, i) => (
                 <div
                   key={step}
-                  className={`flex items-center gap-3 text-sm transition-all duration-500 ${i <= currentStep ? "opacity-100" : "opacity-0 translate-y-2"
-                    }`}
+                  className={`flex items-center gap-3 text-sm transition-all duration-500 ${i <= currentStep ? "opacity-100" : "opacity-0 translate-y-2"}`}
                 >
                   {i < currentStep ? (
-                    <Check className="h-4 w-4 text-success" />
+                    <Check className="h-4 w-4 text-emerald-500" />
                   ) : i === currentStep ? (
                     <Loader2 className="h-4 w-4 animate-spin text-primary" />
                   ) : (
                     <div className="h-4 w-4" />
                   )}
-                  <span
-                    className={
-                      i < currentStep
-                        ? "text-muted-foreground line-through"
-                        : i === currentStep
-                          ? "text-foreground"
-                          : "text-muted-foreground"
-                    }
-                  >
+                  <span className={i < currentStep ? "text-muted-foreground line-through" : i === currentStep ? "text-foreground font-medium" : "text-muted-foreground/50"}>
                     {step}
                   </span>
                 </div>
@@ -191,10 +314,8 @@ export default function ImportRepositoryPage() {
             </div>
           )}
         </div>
-
-        {/* Helper text */}
         <p className="mt-4 text-center text-xs text-muted-foreground/60">
-          Supports public and private repositories. Analysis typically takes 10-30 seconds.
+          OAuth authentication enables seamless imports of both public and private repositories.
         </p>
       </div>
     </main>

@@ -13,7 +13,11 @@ import {
   ShieldAlert,
   GraduationCap,
   Compass,
+  Loader2,
 } from "lucide-react"
+
+// API Call
+import { triggerSonarScan } from "@/lib/api"
 
 // Dashboard Components
 import { GraphView } from "@/components/dashboard/graph-view"
@@ -39,6 +43,9 @@ export default function DashboardPage() {
   const [mainView, setMainView] = useState<MainView>("graph")
   const [mounted, setMounted] = useState(false)
   const [activeRepoName, setActiveRepoName] = useState<string | null>(null)
+  const [activeRepoUrl, setActiveRepoUrl] = useState<string | null>(null)
+  const [activeRepoBranch, setActiveRepoBranch] = useState<string | null>(null)
+  const [isScanning, setIsScanning] = useState(false)
 
   const isResizing = useRef(false)
   const maxSidebarWidth = typeof window !== "undefined" ? window.innerWidth * 0.25 : 400
@@ -46,6 +53,8 @@ export default function DashboardPage() {
   const refreshActiveRepo = useCallback(() => {
     const repo = getActiveRepo()
     setActiveRepoName(repo?.repo_name ?? null)
+    setActiveRepoUrl(repo?.repo_url ?? null)
+    setActiveRepoBranch(repo?.data.branch ?? "main")
     setMainView("graph")
     setActivePanel(null)
   }, [])
@@ -88,6 +97,19 @@ export default function DashboardPage() {
     setMainView((prev) => (prev === view ? "graph" : view))
   }
 
+  const handleTriggerScan = async () => {
+    if (!activeRepoUrl) return
+    setIsScanning(true)
+    try {
+      await triggerSonarScan(activeRepoUrl, activeRepoBranch || "main")
+      // An alert will appear in the inbox when done. User can refresh stats to see updates.
+    } catch (error) {
+      console.error("Failed to trigger scan", error)
+    } finally {
+      setIsScanning(false)
+    }
+  }
+
   return (
     <div className={`flex h-screen flex-col bg-background transition-opacity duration-700 ${mounted ? "opacity-100" : "opacity-0"}`}>
       {/* ─── TOP BAR ─── */}
@@ -99,9 +121,19 @@ export default function DashboardPage() {
           <span className="font-mono text-sm font-medium text-foreground">DevInsight AI</span>
 
           {activeRepoName ? (
-            <span className="rounded-md border border-primary/30 bg-primary/10 px-2 py-0.5 font-mono text-[10px] text-primary">
-              {activeRepoName}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="rounded-md border border-primary/30 bg-primary/10 px-2 py-0.5 font-mono text-[10px] text-primary">
+                {activeRepoName}
+              </span>
+              <button
+                onClick={handleTriggerScan}
+                disabled={isScanning}
+                className="flex items-center gap-1 rounded-md bg-emerald-600/20 px-2 py-0.5 text-[10px] font-medium text-emerald-500 hover:bg-emerald-600/30 transition-colors disabled:opacity-50"
+              >
+                {isScanning ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldAlert className="h-3 w-3" />}
+                SCAN
+              </button>
+            </div>
           ) : (
             <span className="rounded-md border border-border bg-secondary px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
               demo

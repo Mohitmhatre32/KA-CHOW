@@ -24,6 +24,15 @@ async def scan_codebase(request: ScanRequest):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/scan/trigger")
+async def trigger_scan(request: ScanRequest):
+    try:
+        return librarian.trigger_sonar_scan(request.input_source, request.branch)
+    except Exception as e:
+        print("\n❌ CRASH IN TRIGGERING SCAN ❌")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/content", response_model=str)
 async def get_content(request: FileRequest):
     """Fetches raw code for the IDE."""
