@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KA-CHOW | Enterprise Architecture Brain</title>
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0f111a; --sidebar: #161b22; --panel: #21262d; --text: #c9d1d9;
+            --accent: #58a6ff; --success: #2ea043; --danger: #da3633; --warning: #d29922; --border: #30363d;
+            --editor-bg: #0d1117;
+        }
+        body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; overflow: hidden; height: 100vh; }
+        #wrapper { display: flex; height: 100vh; }
+        
+        /* SIDEBAR NAVIGATION */
+        #sidebar { width: 280px; background: var(--sidebar); border-right: 1px solid var(--border); padding: 20px; display: flex; flex-direction: column; gap: 10px; z-index: 20; }
+        .brand { font-size: 1.2rem; font-weight: 800; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
+        .agent-card { padding: 15px; border-radius: 6px; background: transparent; border: 1px solid transparent; cursor: pointer; transition: all 0.2s; opacity: 0.6; }
+        .agent-card:hover { opacity: 1; background: var(--panel); }
+        .agent-card.active { opacity: 1; background: rgba(88, 166, 255, 0.1); border: 1px solid var(--accent); }
+        .agent-name { font-weight: 600; display: block; }
+        .agent-role { font-size: 0.75rem; color: #8b949e; }
+
+        /* VIEW CONTAINER */
+        #main-container { flex-grow: 1; position: relative; display: flex; flex-direction: column; height: 100%; overflow: hidden;}
+        .view-panel { display: none; flex-direction: column; height: 100%; width: 100%; }
+        .view-panel.active { display: flex; }
+
+        /* TOP BARS & INPUTS */
+        .top-bar { height: 60px; background: var(--sidebar); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 20px; gap: 15px; flex-shrink: 0; }
+        select, input { background: #0d1117; border: 1px solid var(--border); color: white; padding: 8px 12px; border-radius: 6px; font-family: monospace; }
+        button { background: var(--success); color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+        button:hover { opacity: 0.9; transform: translateY(-1px); }
+        button:disabled { background: #555; cursor: not-allowed; transform: none; }
+        
+        /* VIEW 1: GRAPH & INSPECTOR */
+        #mynetwork { flex-grow: 1; background: radial-gradient(circle at center, #161b22 0%, #0f111a 100%); }
+        #inspector { position: absolute; right: 0; top: 60px; bottom: 0; width: 340px; background: var(--sidebar); border-left: 1px solid var(--border); transform: translateX(100%); transition: transform 0.3s ease; padding: 20px; box-sizing: border-box; overflow-y: auto; z-index: 10; }
+        #inspector.open { transform: translateX(0); }
+        .metric-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+        
+        /* TIMELINE STYLES */
+        .timeline-card { background: #21262d; padding: 10px; border-radius: 6px; border-left: 3px solid var(--border); cursor: pointer; transition: 0.2s; margin-bottom: 8px;}
+        .timeline-card:hover { background: #30363d; border-left-color: var(--accent); }
+        .timeline-card.active { border-left-color: var(--success); background: rgba(46, 160, 67, 0.1); }
+        .t-hash { font-family: monospace; font-size: 0.7rem; color: var(--accent); }
+        .t-msg { font-size: 0.85rem; font-weight: 600; display: block; margin: 3px 0; color: white;}
+        .t-meta { font-size: 0.7rem; color: #8b949e; }
+
+        /* VIEW 2: IDE & GITOPS */
+        .ide-layout { display: flex; flex-grow: 1; overflow: hidden; }
+        .explorer { width: 260px; background: var(--sidebar); border-right: 1px solid var(--border); overflow-y: auto; padding: 10px 0; }
+        .editor-container { flex-grow: 1; display: flex; flex-direction: column; background: var(--editor-bg); position: relative;}
+        .code-input { flex-grow: 1; background: transparent; border: none; color: #a5d6ff; font-family: 'JetBrains Mono', monospace; padding: 20px; font-size: 14px; outline: none; resize: none; line-height: 1.6; }
+        
+        .tree-item { padding: 4px 15px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 0.9rem; color: #8b949e; transition: 0.2s; }
+        .tree-item:hover { background: #2a2d2e; color: white; }
+        .tree-folder { font-weight: bold; color: #d1d5da; padding-top: 8px; }
+
+        /* VIEW 3: RAG CHATBOT */
+        #chat-box { flex-grow: 1; background: var(--editor-bg); padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; font-size: 0.95rem; }
+        .chat-msg { padding: 10px 15px; border-radius: 8px; max-width: 80%; line-height: 1.5;}
+        .msg-user { background: #2a2d2e; color: white; align-self: flex-end; border-bottom-right-radius: 0;}
+        .msg-ai { background: rgba(88, 166, 255, 0.1); color: #c9d1d9; border: 1px solid var(--border); align-self: flex-start; border-bottom-left-radius: 0;}
+
+        /* UTILS & ALERTS */
+        .alert-panel { width: 300px; background: var(--sidebar); border-left: 1px solid var(--border); padding: 15px; display: none; flex-direction: column; overflow-y: auto; }
+        .alert-panel.open { display: flex; }
+        .alert-card { background: #21262d; padding: 12px; border-radius: 6px; margin-bottom: 10px; border-left: 4px solid var(--accent); font-size: 0.85rem; }
+        .alert-critical { border-left-color: var(--danger); }
+        .alert-success { border-left-color: var(--success); }
+
+        .badge { padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; background: #333; }
+        .badge-danger { background: rgba(218, 54, 51, 0.2); color: var(--danger); }
+        .badge-success { background: rgba(46, 160, 67, 0.2); color: var(--success); }
+        #loader { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 1000; display: none; align-items: center; justify-content: center; color: var(--accent); font-weight: bold; font-size: 1.5rem; flex-direction: column; gap: 15px;}
+    </style>
+</head>
+<body>
+
+<div id="loader">
+    <div>⚙️ KA-CHOW IS THINKING...</div>
+    <div style="font-size: 1rem; color: #8b949e; font-weight: normal;" id="loader-text">Please wait</div>
+</div>
+
+<div id="wrapper">
+    <!-- SIDEBAR NAVIGATION -->
+    <div id="sidebar">
+        <div class="brand">⚡ KA-CHOW <span style="font-size:0.7rem; background:var(--accent); color:black; padding:2px 4px; border-radius:3px;">ENT</span></div>
+        
+        <div class="agent-card active" id="tab-librarian" onclick="switchTab('librarian')">
+            <span class="agent-name">1. The Librarian</span>
+            <span class="agent-role">Graph & Time Travel</span>
+        </div>
+        
+        <div class="agent-card" id="tab-guardian" onclick="switchTab('guardian')">
+            <span class="agent-name">2. The Guardian</span>
+            <span class="agent-role">Live IDE & GitOps</span>
+        </div>
+
+        <div class="agent-card" id="tab-mentor" onclick="switchTab('mentor')">
+            <span class="agent-name">3. The Mentor</span>
+            <span class="agent-role">RAG Code Q&A</span>
+        </div>
+
+        <div style="margin-top:auto; padding:10px; border-top:1px solid var(--border);">
+            <button onclick="toggleAlerts()" style="width:100%; background:var(--panel); color:white; border:1px solid var(--border); padding:8px; border-radius:4px; cursor:pointer;">
+                🔔 Team Alerts <span id="badge" class="badge" style="background:var(--danger); display:none;">0</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- MAIN UI -->
+    <div id="main-container">
+        
+        <!-- ========================================== -->
+        <!-- VIEW 1: LIBRARIAN (GRAPH & TIMELINE)       -->
+        <!-- ========================================== -->
+        <div id="view-librarian" class="view-panel active">
+            <div class="top-bar">
+                <select id="input-type" onchange="toggleInput()">
+                    <option value="url">Scan GitHub Repo</option>
+                    <option value="prompt">AI Scaffold Project</option>
+                </select>
+                <input type="text" id="repo-url" placeholder="https://github.com/..." value="https://github.com/tiangolo/fastapi" onblur="fetchBranches()">
+                <select id="branch-select" style="display:none; min-width:120px;"></select>
+                <input type="text" id="ai-prompt" style="display:none; width:400px;" placeholder="Build a Ride-Sharing backend...">
+                <button id="action-btn" onclick="executeAction()" style="background:var(--success); color:white;">Execute Command</button>
+                
+                    <div id="system-health-panel" style="display:none; gap:12px; align-items:center; background:rgba(0,0,0,0.5); padding:8px 18px; border-radius:10px; border:1px solid var(--border); box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
+                        <div style="display:flex; flex-direction:column; align-items:center;">
+                            <span style="font-size:0.65rem; color:#8b949e; text-transform:uppercase;">Security</span>
+                            <div style="display:flex; align-items:center; gap:4px;">
+                                <span id="sys-sec-rating" class="badge" style="width:18px; height:18px; display:flex; align-items:center; justify-content:center; padding:0;">A</span>
+                                <span id="sys-vulnerabilities" style="font-size:0.85rem; font-weight:700;">0</span>
+                            </div>
+                        </div>
+                        <div style="display:flex; flex-direction:column; align-items:center;">
+                            <span style="font-size:0.65rem; color:#8b949e; text-transform:uppercase;">Reliability</span>
+                            <div style="display:flex; align-items:center; gap:4px;">
+                                <span id="sys-rel-rating" class="badge" style="width:18px; height:18px; display:flex; align-items:center; justify-content:center; padding:0;">A</span>
+                                <span id="sys-bugs" style="font-size:0.85rem; font-weight:700;">0</span>
+                            </div>
+                        </div>
+                        <div style="display:flex; flex-direction:column; align-items:center;">
+                            <span style="font-size:0.65rem; color:#8b949e; text-transform:uppercase;">Maint.</span>
+                            <div style="display:flex; align-items:center; gap:4px;">
+                                <span id="sys-maint-rating" class="badge" style="width:18px; height:18px; display:flex; align-items:center; justify-content:center; padding:0;">A</span>
+                                <span id="sys-smells" style="font-size:0.85rem; font-weight:700;">0</span>
+                            </div>
+                        </div>
+                        <div style="display:flex; flex-direction:column; align-items:center;">
+                            <span style="font-size:0.65rem; color:#8b949e; text-transform:uppercase;">Hotspots</span>
+                            <span id="sys-hotspots" style="font-size:0.85rem; font-weight:700;">0</span>
+                        </div>
+                        <div style="display:flex; flex-direction:column; align-items:center;">
+                            <span style="font-size:0.65rem; color:#8b949e; text-transform:uppercase;">Coverage</span>
+                            <span id="sys-cov" style="font-size:0.85rem; font-weight:700;">0%</span>
+                        </div>
+                        <div style="display:flex; flex-direction:column; align-items:center;">
+                            <span style="font-size:0.65rem; color:#8b949e; text-transform:uppercase;">Duplication</span>
+                            <span id="sys-dupes" style="font-size:0.85rem; font-weight:700;">0%</span>
+                        </div>
+                        <div style="width:1px; height:25px; background:var(--border); margin:0 5px;"></div>
+                        <div style="display:flex; flex-direction:column; align-items:flex-end;">
+                            <span style="font-size:0.65rem; color:#8b949e; text-transform:uppercase;">Gate</span>
+                            <span id="sys-gate" class="badge badge-success">PASSED</span>
+                        </div>
+                        <div style="display:flex; flex-direction:column; align-items:center; margin-left:10px;">
+                            <span style="font-size:0.65rem; color:#8b949e; text-transform:uppercase;">Score</span>
+                            <span id="health-display" style="font-size:1.4rem; font-weight:900; color:var(--success); line-height:1;">--%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="mynetwork"></div>
+
+            <div id="inspector">
+                <h3 style="margin-top:0; color:var(--accent);">SonarQube Detail</h3>
+                <p id="selected-node" style="color:#8b949e; font-family:monospace; font-size:0.8rem; word-break:break-all;">Select a file...</p>
+                <div class="metric-row"><span>Bugs</span><span id="m-bugs" class="badge">0</span></div>
+                <div class="metric-row"><span>Code Smells</span><span id="m-smells" class="badge">0</span></div>
+                <div class="metric-row"><span>Quality Gate</span><span id="m-gate" class="badge">--</span></div>
+                
+                <hr style="border:0; border-top:1px solid var(--border); margin: 20px 0;">
+                <h3 style="color:var(--accent);">🕰️ Repository Timeline</h3>
+                <div id="timeline-list" style="display:flex; flex-direction:column; gap:10px;">
+                    <p style="color:#8b949e; font-size:0.8rem;">Load a GitHub repo to see history...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- VIEW 2: GUARDIAN (LIVE IDE & AUTO-HEAL)    -->
+        <!-- ========================================== -->
+        <div id="view-guardian" class="view-panel">
+            <div class="top-bar" style="background: #2d2d2d;">
+                <div id="active-filename" style="font-weight:600; color:var(--accent)">No File Selected</div>
+                <button onclick="saveAndPush()" style="margin-left:auto; background:var(--success); color:black; font-weight:bold;">Save & Push to Git 🚀</button>
+            </div>
+            
+            <div class="ide-layout">
+                <div class="explorer" id="file-tree">
+                    <div style="padding:10px; color:#888; font-size:0.8rem;">Load a project in Librarian first...</div>
+                </div>
+                
+                <div class="editor-container">
+                    <textarea id="code-editor" class="code-input" spellcheck="false">// Open a file from the explorer to begin development...</textarea>
+                    <div style="height:35px; background:var(--panel); display:flex; align-items:center; padding:0 15px; font-size:0.8rem; color:white; justify-content:space-between; border-top: 1px solid var(--border);">
+                        <span id="ide-status">Status: Ready</span>
+                        <div>
+                            <!-- Magic Wand Auto-Heal Button -->
+                            <button id="btn-ide-heal" style="display:none; background:#ab7df8; color:black; padding:4px 10px; margin-right:10px;" onclick="triggerIdeHeal()">✨ Auto-Heal Code</button>
+                            <span style="color:#8b949e;">SonarQube Enforcer Active</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="alert-panel" id="alert-panel">
+                    <h3 style="margin-top:0;">Team Inbox</h3>
+                    <div id="alert-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- VIEW 3: MENTOR (RAG CHATBOT)               -->
+        <!-- ========================================== -->
+        <div id="view-mentor" class="view-panel">
+            <div class="top-bar" style="background: #2d2d2d;">
+                <div style="font-weight:600; color:var(--accent)">🧠 The Mentor (RAG Engine)</div>
+                <div style="margin-left:auto; color:#8b949e; font-size: 0.85rem;" id="rag-status">Status: Offline</div>
+            </div>
+            
+            <div id="chat-box">
+                <div class="chat-msg msg-ai">
+                    <strong>KA-CHOW:</strong> Hello! I am your AI Staff Engineer. I have read the Architecture Map and the raw code. Ask me anything about this repository!
+                </div>
+            </div>
+            
+            <div style="padding: 15px; background: var(--sidebar); border-top: 1px solid var(--border); display: flex; gap: 10px;">
+                <input type="text" id="chat-input" placeholder="e.g. Which file connects to the database?" style="flex-grow: 1; font-family: sans-serif;" onkeypress="if(event.key === 'Enter') sendChat()">
+                <button onclick="sendChat()" style="width: 120px;">Ask Code</button>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- ARCHITECT MODAL (Blueprint Generation) -->
+<div id="blueprint-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:100; align-items:center; justify-content:center;">
+    <div style="background:var(--sidebar); width:850px; max-height:85vh; border-radius:12px; border:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden;">
+        <div style="padding:20px; border-bottom:1px solid var(--border); background:var(--panel); display:flex; justify-content:space-between; align-items:center;">
+            <h2 style="margin:0; color:var(--accent);">🏗️ Architect Design Complete</h2>
+            <button onclick="document.getElementById('blueprint-modal').style.display='none'" style="background:var(--danger); border:none; color:white; padding:5px 15px; border-radius:4px; cursor:pointer;">Close</button>
+        </div>
+        <div style="padding:20px; overflow-y:auto; display:flex; gap:20px;">
+            <div style="flex:1; background:#0d1117; padding:15px; border-radius:8px; border:1px solid var(--border);">
+                <h4 style="margin-top:0; color:var(--success);">Blueprint Summary</h4>
+                <pre id="blueprint-readme" style="white-space:pre-wrap; font-family:sans-serif; color:#c9d1d9; font-size:0.85rem;"></pre>
+            </div>
+            <div style="flex:1; background:#0d1117; padding:15px; border-radius:8px; border:1px solid var(--border);">
+                <h4 style="margin-top:0; color:var(--accent);">Scaffolded File Structure</h4>
+                <pre id="blueprint-tree" style="color:#58a6ff; font-family:monospace; font-size:0.85rem;"></pre>
+            </div>
+        </div>
+        <div style="padding:20px; border-top:1px solid var(--border); text-align:right; background:var(--panel);">
+            <button onclick="ingestGeneratedCode()" style="background:var(--success); font-size:1.1rem; padding:12px 25px;">Finalize & Map Architecture 🧠</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // GLOBAL STATE
+    let network = null;
+    let currentProjectPath = ""; 
+    let currentProjectKey = "";  
+    let currentEditingFile = ""; 
+    let qnaInitializedPath = "";
+    let currentIssues = []; // Holds Sonar/Guardian issues for auto-heal
+
+    function showLoader(text) {
+        document.getElementById('loader').style.display = 'flex';
+        document.getElementById('loader-text').innerText = text;
+    }
+    function hideLoader() { document.getElementById('loader').style.display = 'none'; }
+
+    function getRatingLabel(val) {
+        if (val <= 1) return { label: 'A', class: 'badge-success' };
+        if (val <= 2) return { label: 'B', class: 'badge-success' };
+        if (val <= 3) return { label: 'C', class: 'badge-warning' };
+        if (val <= 4) return { label: 'D', class: 'badge-danger' };
+        return { label: 'E', class: 'badge-danger' };
+    }
+
+    // ==========================================
+    // TAB NAVIGATION
+    // ==========================================
+    function switchTab(tabId) {
+        document.querySelectorAll('.agent-card').forEach(c => c.classList.remove('active'));
+        document.getElementById('tab-' + tabId).classList.add('active');
+        document.querySelectorAll('.view-panel').forEach(v => v.classList.remove('active'));
+        document.getElementById('view-' + tabId).classList.add('active');
+
+        // Auto-Boot RAG if Mentor tab is opened
+        if (tabId === 'mentor' && currentProjectPath && qnaInitializedPath !== currentProjectPath) {
+            initQnA(currentProjectPath);
+        }
+    }
+
+    function toggleInput() {
+        const type = document.getElementById('input-type').value;
+        const urlInput = document.getElementById('repo-url');
+        const branchSelect = document.getElementById('branch-select');
+        const promptInput = document.getElementById('ai-prompt');
+        const btn = document.getElementById('action-btn');
+
+        if (type === 'url') {
+            urlInput.style.display = 'block';
+            branchSelect.style.display = branchSelect.options.length > 0 ? 'block' : 'none';
+            promptInput.style.display = 'none';
+            btn.innerText = "Run Sonar Scan";
+        } else {
+            urlInput.style.display = 'none';
+            branchSelect.style.display = 'none';
+            promptInput.style.display = 'block';
+            btn.innerText = "Scaffold Project";
+        }
+    }
+
+    // ==========================================
+    // LIBRARIAN / ARCHITECT LOGIC
+    // ==========================================
+    async function fetchBranches() {
+        const url = document.getElementById('repo-url').value;
+        if (!url.startsWith('http')) return;
+        const branchSelect = document.getElementById('branch-select');
+        try {
+            const res = await fetch('/api/librarian/branches', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ repo_url: url })
+            });
+            const branches = await res.json();
+            branchSelect.innerHTML = branches.map(b => `<option value="${b}">${b}</option>`).join('');
+            branchSelect.style.display = 'block';
+        } catch (e) { console.error(e); }
+    }
+
+    async function executeAction(specificHash = null) {
+        const type = document.getElementById('input-type').value;
+        
+        try {
+            if (type === 'url' || specificHash) {
+                showLoader(specificHash ? `Time Traveling to ${specificHash}...` : "Cloning & Running SonarScanner (Takes 20s)...");
+                const url = document.getElementById('repo-url').value;
+                const branch = specificHash || document.getElementById('branch-select').value || "main";
+                
+                const res = await fetch('/api/librarian/scan', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ input_source: url, branch: branch })
+                });
+                handleScanResult(await res.json());
+                if (!specificHash) fetchTimeline(url, branch); // Only fetch timeline on initial scan
+
+            } else {
+                showLoader("Architect is designing Microservices...");
+                const prompt = document.getElementById('ai-prompt').value;
+                const res = await fetch('/api/architect/scaffold', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ requirements: prompt })
+                });
+                const data = await res.json();
+                currentProjectPath = data.project_path;
+                document.getElementById('blueprint-readme').innerText = data.blueprint_summary;
+                document.getElementById('blueprint-tree').innerText = "📁 " + data.files.join('\n📁 ');
+                document.getElementById('blueprint-modal').style.display = 'flex';
+                hideLoader();
+            }
+        } catch (e) { alert("Error: " + e); hideLoader(); }
+    }
+
+    async function ingestGeneratedCode() {
+        document.getElementById('blueprint-modal').style.display = 'none';
+        showLoader("Librarian mapping local code...");
+        try {
+            const res = await fetch('/api/librarian/scan', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ input_source: currentProjectPath })
+            });
+            handleScanResult(await res.json());
+        } catch (e) { alert(e); hideLoader(); }
+    }
+
+    function handleScanResult(data) {
+        currentProjectPath = data.project_root;
+        currentProjectKey = data.project_name;
+        renderGraph(data);
+        setupRecursiveTree(data.nodes);
+        hideLoader();
+    }
+
+    // ==========================================
+    // KNOWLEDGE GRAPH & TIMELINE
+    // ==========================================
+    function renderGraph(data) {
+        const hPanel = document.getElementById('system-health-panel');
+        const hVal = document.getElementById('health-display');
+        
+        hPanel.style.display = 'flex';
+        hVal.innerText = data.health_score + "%";
+        hVal.style.color = data.health_score > 80 ? 'var(--success)' : (data.health_score > 50 ? 'var(--warning)' : 'var(--danger)');
+        
+        // Security
+        const sec = getRatingLabel(data.system_health.security_rating);
+        document.getElementById('sys-sec-rating').innerText = sec.label;
+        document.getElementById('sys-sec-rating').className = "badge " + sec.class;
+        document.getElementById('sys-vulnerabilities').innerText = data.system_health.vulnerabilities;
+
+        // Reliability
+        const rel = getRatingLabel(data.system_health.reliability_rating);
+        document.getElementById('sys-rel-rating').innerText = rel.label;
+        document.getElementById('sys-rel-rating').className = "badge " + rel.class;
+        document.getElementById('sys-bugs').innerText = data.system_health.bugs;
+
+        // Maintainability
+        const maint = getRatingLabel(data.system_health.maintainability_rating);
+        document.getElementById('sys-maint-rating').innerText = maint.label;
+        document.getElementById('sys-maint-rating').className = "badge " + maint.class;
+        document.getElementById('sys-smells').innerText = data.system_health.code_smells;
+
+        document.getElementById('sys-hotspots').innerText = data.system_health.security_hotspots;
+        document.getElementById('sys-cov').innerText = Math.round(data.system_health.coverage) + "%";
+        document.getElementById('sys-dupes').innerText = data.system_health.duplicated_lines_density.toFixed(1) + "%";
+        
+        const gate = document.getElementById('sys-gate');
+        gate.innerText = data.system_health.quality_gate === "OK" ? "PASSED" : (data.system_health.quality_gate === "ERROR" ? "FAILED" : data.system_health.quality_gate);
+        gate.className = "badge " + (data.system_health.quality_gate === "ERROR" ? "badge-danger" : "badge-success");
+        
+        const bDisplay = document.getElementById('branch-display');
+        bDisplay.innerText = "Branch: " + data.branch;
+        bDisplay.style.display = "block";
+
+        const nodes = new vis.DataSet(data.nodes.map(n => {
+            if (n.type === 'folder') return { id: n.id, label: n.label, color: '#30363d', font: {color: 'white'}, shape: 'box' };
+            const debt = n.sonar_health.code_smells + n.sonar_health.bugs;
+            const color = debt > 5 ? 'var(--danger)' : (debt > 0 ? 'var(--warning)' : 'var(--success)');
+            return { id: n.id, label: n.label, color: { background: color, border: 'white' }, font: { color: 'white' }, sonarData: n.sonar_health };
+        }));
+        
+        const edges = new vis.DataSet(data.edges.map(e => ({ from: e.source, to: e.target, color: e.relation === 'contains' ? '#8b949e' : '#58a6ff', arrows: 'to', dashes: e.relation === 'contains' })));
+        
+        if(network) network.destroy();
+        network = new vis.Network(document.getElementById('mynetwork'), { nodes, edges }, { physics: { stabilization: false, forceAtlas2Based: { gravitationalConstant: -50 } }, interaction: { hover: true } });
+        
+        network.on("click", (p) => {
+            if (p.nodes.length > 0 && nodes.get(p.nodes[0]).sonarData) {
+                showInspector(p.nodes[0], nodes.get(p.nodes[0]).sonarData);
+            } else document.getElementById('inspector').classList.remove('open');
+        });
+    }
+
+    function showInspector(name, m) {
+        document.getElementById('inspector').classList.add('open');
+        document.getElementById('selected-node').innerText = name;
+        document.getElementById('m-bugs').innerText = m.bugs;
+        document.getElementById('m-smells').innerText = m.code_smells;
+        document.getElementById('m-gate').innerText = m.quality_gate;
+        document.getElementById('m-gate').className = m.quality_gate === "PASSED" ? "badge badge-success" : "badge badge-danger";
+    }
+
+    async function fetchTimeline(url, currentActive) {
+        try {
+            const res = await fetch('/api/librarian/history', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ repo_url: url })
+            });
+            const history = await res.json();
+            const container = document.getElementById('timeline-list');
+            container.innerHTML = "";
+
+            history.forEach(c => {
+                const div = document.createElement('div');
+                div.className = `timeline-card ${c.hash === currentActive || c.hash.startsWith(currentActive) ? 'active' : ''}`;
+                div.onclick = () => executeAction(c.hash); 
+                div.innerHTML = `<span class="t-hash">#${c.hash}</span><span class="t-msg">${c.message}</span><div class="t-meta">${c.author} • ${c.date}</div>`;
+                container.appendChild(div);
+            });
+        } catch (e) { console.error(e); }
+    }
+
+    // ==========================================
+    // GUARDIAN IDE LOGIC
+    // ==========================================
+    function setupRecursiveTree(nodes) {
+        const container = document.getElementById('file-tree');
+        container.innerHTML = "";
+        const tree = {};
+        nodes.forEach(node => {
+            const parts = node.id.split('/');
+            let current = tree;
+            parts.forEach((part, index) => {
+                if (!current[part]) {
+                    current[part] = { name: part, type: (index === parts.length - 1 && node.type === 'file') ? 'file' : 'folder', fullPath: node.id, sonar: node.sonar_health, children: {} };
+                }
+                current = current[part].children;
+            });
+        });
+        renderTreeRecursive(tree, container, 0);
+    }
+
+    function renderTreeRecursive(tree, container, level) {
+        Object.values(tree).forEach(item => {
+            const div = document.createElement('div');
+            div.className = `tree-item ${item.type === 'folder' ? 'tree-folder' : ''}`;
+            div.style.paddingLeft = (level * 15 + 15) + "px";
+            div.innerHTML = (item.type === 'folder' ? '📁 ' : '📄 ') + item.name;
+            
+            if (item.type === 'file') {
+                const debt = item.sonar.bugs + item.sonar.code_smells;
+                if(debt > 0) div.style.color = "var(--warning)";
+                if(debt > 5) div.style.color = "var(--danger)";
+                div.onclick = () => loadFileIntoEditor(currentProjectPath + "/" + item.fullPath, item.name);
+            }
+            container.appendChild(div);
+            if (item.children) renderTreeRecursive(item.children, container, level + 1);
+        });
+    }
+
+    async function loadFileIntoEditor(absPath, filename) {
+        currentEditingFile = absPath;
+        document.getElementById('active-filename').innerText = filename;
+        document.getElementById('ide-status').innerText = "Status: Loading...";
+        document.getElementById('btn-ide-heal').style.display = 'none'; // Hide magic wand
+        
+        try {
+            const res = await fetch('/api/librarian/content', {
+                method: 'POST', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ file_path: absPath })
+            });
+            document.getElementById('code-editor').value = await res.json();
+            document.getElementById('ide-status').innerText = "Status: Ready";
+            document.getElementById('ide-status').style.color = "white";
+        } catch(e) { alert("Could not read file"); }
+    }
+
+    async function saveAndPush() {
+        if(!currentEditingFile) return alert("Select a file first");
+        const code = document.getElementById('code-editor').value;
+        const statusEl = document.getElementById('ide-status');
+        const healBtn = document.getElementById('btn-ide-heal');
+        
+        statusEl.innerText = "⏳ GUARDIAN CHECKING QUALITY GATE...";
+        statusEl.style.color = "var(--text)";
+        healBtn.style.display = 'none';
+
+        try {
+            const res = await fetch('/api/guardian/save-check', {
+                method: 'POST', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ file_path: currentEditingFile, content: code, project_key: currentProjectKey })
+            });
+            const data = await res.json();
+            
+            if (data.status === "REJECTED") {
+                statusEl.innerText = "❌ PUSH REJECTED: SONAR GATE FAILED";
+                statusEl.style.color = "var(--danger)";
+                // Enable Auto-Heal feature
+                currentIssues = ["SonarQube detected high technical debt (Bugs or Code Smells)."];
+                healBtn.style.display = 'inline-block';
+            } else {
+                statusEl.innerText = "✅ CHANGES PUSHED TO GITHUB";
+                statusEl.style.color = "var(--success)";
+            }
+            fetchAlerts();
+        } catch(e) { alert("Connection Error"); }
+    }
+
+    async function triggerIdeHeal() {
+        const code = document.getElementById('code-editor').value;
+        const statusEl = document.getElementById('ide-status');
+        const healBtn = document.getElementById('btn-ide-heal');
+
+        statusEl.innerText = "✨ AI REFACTORING CODE...";
+        healBtn.disabled = true;
+
+        try {
+            const res = await fetch('/api/guardian/heal', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ file_name: currentEditingFile, code_content: code, issues: currentIssues })
+            });
+            const data = await res.json();
+            document.getElementById('code-editor').value = data.fixed_code;
+            statusEl.innerText = "✅ HEALED. READY TO PUSH.";
+            statusEl.style.color = "var(--success)";
+        } catch (e) {
+            alert("Error Healing: " + e);
+        } finally {
+            healBtn.style.display = 'none';
+            healBtn.disabled = false;
+        }
+    }
+
+    // ==========================================
+    // ALERT SYSTEM
+    // ==========================================
+    async function fetchAlerts() {
+        const res = await fetch('/api/alerts');
+        const alerts = await res.json();
+        const list = document.getElementById('alert-list');
+        const badge = document.getElementById('badge');
+        
+        list.innerHTML = "";
+        badge.innerText = alerts.length;
+        badge.style.display = alerts.length > 0 ? "inline-block" : "none";
+
+        alerts.forEach(a => {
+            const div = document.createElement('div');
+            div.className = `alert-card alert-${a.severity}`;
+            div.innerHTML = `<strong>${a.title}</strong><br><small>${a.timestamp}</small><div style="margin-top:5px;">${a.message}</div>`;
+            list.appendChild(div);
+        });
+        if(alerts.length > 0 && alerts[0].severity === 'critical') document.getElementById('alert-panel').classList.add('open');
+    }
+    function toggleAlerts() { document.getElementById('alert-panel').classList.toggle('open'); }
+    setInterval(fetchAlerts, 5000);
+
+    // ==========================================
+    // MENTOR (RAG CHATBOT) LOGIC
+    // ==========================================
+    async function initQnA(path) {
+        const statusEl = document.getElementById('rag-status');
+        statusEl.innerText = "Status: Vectorizing Codebase...";
+        statusEl.style.color = "var(--warning)";
+        try {
+            const res = await fetch('/api/qna/init', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ repo_path: path }) // Ensure your router uses this model
+            });
+            if (res.ok) {
+                qnaInitializedPath = path;
+                statusEl.innerText = "Status: RAG Online";
+                statusEl.style.color = "var(--success)";
+            }
+        } catch (e) { statusEl.innerText = "Status: Error"; statusEl.style.color = "var(--danger)"; }
+    }
+
+    async function sendChat() {
+        const input = document.getElementById('chat-input');
+        const question = input.value.trim();
+        if(!question || !qnaInitializedPath) return;
+
+        const chatBox = document.getElementById('chat-box');
+        chatBox.innerHTML += `<div class="chat-msg msg-user">${question}</div>`;
+        input.value = ""; chatBox.scrollTop = chatBox.scrollHeight;
+
+        const id = "msg-" + Date.now();
+        chatBox.innerHTML += `<div id="${id}" class="chat-msg msg-ai"><em>Searching vector space & architecture map...</em></div>`;
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        try {
+            const res = await fetch('/api/qna/ask', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ question: question })
+            });
+            const data = await res.json();
+            document.getElementById(id).innerHTML = `<strong>KA-CHOW:</strong><br>${data.answer.replace(/\n/g, '<br>')}`;
+        } catch(e) { document.getElementById(id).innerHTML = `<strong style="color:var(--danger)">Error:</strong> ${e.message}`; }
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+</script>
+</body>
+</html>
