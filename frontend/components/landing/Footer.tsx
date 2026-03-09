@@ -50,7 +50,7 @@ export const Footer = () => {
                     <div className="lg:col-span-1">
                         <div className="mb-6">
                             <h3 className="text-2xl font-bold mb-2" style={{ color: "var(--foreground)" }}>
-                                DevInsight AI
+                                KA-CHOW
                             </h3>
                             <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
                                 Engineering intelligence platform
@@ -109,7 +109,7 @@ export const Footer = () => {
                 <div style={{ borderTop: "1px solid var(--border)" }} className="pt-8">
                     <div className="flex flex-col md:flex-row justify-between items-center gap-6">
                         <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-                            Copyright {currentYear} DevInsight AI. All rights reserved.
+                            Copyright {currentYear} KA-CHOW. All rights reserved.
                         </p>
 
                         <div className="flex gap-6">

@@ -5,10 +5,9 @@ import git
 from git import Repo
 from typing import Dict, List, Any
 from app.core.config import settings
-from app.core.sonar_client import sonar
 from app.core.alerts import alert_system
 from app.core.llm import client as groq_client
-from .models import GraphResponse, FileNode, BranchRequest, FileRequest, CommitInfo, HistoryRequest, SystemHealth
+from .models import GraphResponse, FileNode, BranchRequest, FileRequest, CommitInfo, HistoryRequest
 import json
 
 class LibrarianService:
@@ -85,7 +84,6 @@ class LibrarianService:
         
         nodes_data = []
         edges_data = []
-        total_debt = 0
         file_count = 0
         
         repo_name = os.path.basename(root_path)
@@ -117,9 +115,6 @@ class LibrarianService:
                     mod_name = self._file_to_module(rel_path)
                     self.module_map[mod_name] = rel_path
 
-                    # Get Sonar Metrics (using repo_name as the project key)
-                    metrics = sonar.get_file_metrics(rel_path, project_key=repo_name)
-                    total_debt += metrics['code_smells']
                     file_count += 1
 
                     try:
@@ -127,9 +122,9 @@ class LibrarianService:
                             content = f.read()
                     except: content = ""
 
-                    self.graph.add_node(rel_path, metrics=metrics, content=content, type="file")
+                    self.graph.add_node(rel_path, content=content, type="file")
                     nodes_data.append(FileNode(
-                        id=rel_path, label=file, type="file", sonar_health=metrics, layer="backend"
+                        id=rel_path, label=file, type="file", layer="backend"
                     ))
 
         # =========================================================
@@ -171,7 +166,7 @@ class LibrarianService:
                     self.graph.add_node(parent_dir, type="folder")
                     nodes_data.append(FileNode(
                         id=parent_dir, label=f"📂 {os.path.basename(parent_dir)}", 
-                        type="folder", sonar_health={"bugs":0, "vulnerabilities":0, "code_smells":0, "coverage":100, "quality_gate":"PASSED"}, 
+                        type="folder", 
                         layer="system"
                     ))
                 
@@ -179,7 +174,6 @@ class LibrarianService:
                     self.graph.add_edge(parent_dir, node_id)
                     edges_data.append({"source": parent_dir, "target": node_id, "relation": "contains"})
 
-        avg_health = 100 - (total_debt / file_count) if file_count > 0 else 100
         
         # =========================================================
         # 🌟 WRITE THE MAP FOR THE RAG ENGINE (Agent 3)
@@ -198,97 +192,21 @@ class LibrarianService:
         except Exception as e: 
             print(f"Warning: Could not write architecture map for RAG: {e}")
 
-        # Get Project-Level Metrics
-        system_metrics = sonar.get_project_metrics(project_key=repo_name)
-        
         # 🔔 Alert: Scan Complete
-        bugs = system_metrics.get("bugs", 0)
-        vulns = system_metrics.get("vulnerabilities", 0)
-        
-        if vulns > 0:
-            alert_system.add_alert(
-                title="Critical Issues Found",
-                message=f"{repo_name}: Detected {vulns} vulnerabilities during scan. Immediate review required.",
-                severity="critical"
-            )
-        elif bugs > 10:
-             alert_system.add_alert(
-                title="High Bug Count",
-                message=f"{repo_name}: Analysis found {bugs} potential bugs. Consider checking the health panel.",
-                severity="warning"
-            )
-        else:
-            alert_system.add_alert(
-                title="Knowledge Graph Ready",
-                message=f"Successfully mapped {file_count} nodes for {repo_name}. Overall Health: {avg_health:.0f}%",
-                severity="success"
-            )
+        alert_system.add_alert(
+            title="Knowledge Graph Ready",
+            message=f"Successfully mapped {file_count} nodes for {repo_name}.",
+            severity="success"
+        )
 
         return GraphResponse(
             project_name=os.path.basename(root_path),
             branch=branch,
             nodes=nodes_data,
             edges=edges_data,
-            health_score=round(avg_health, 2),
-            system_health=SystemHealth(**system_metrics),
             project_root=os.path.abspath(root_path) 
         )
         
-    def trigger_sonar_scan(self, input_source: str, branch: str = "main") -> Dict[str, Any]:
-        """Triggers the SonarQube scanner for a given repository."""
-        repo_name = input_source.rstrip("/").split("/")[-1].replace(".git", "")
-        
-        # Determine the root path of the project
-        if input_source.startswith("http"):
-            path = os.path.join(settings.REPO_STORAGE_PATH, repo_name)
-            if not os.path.exists(path):
-                # If it doesn't exist, clone it first
-                path = self._clone_repo(input_source, branch)
-        else:
-            path = input_source # Local path from Architect
-            
-        # Alert that scan has started
-        alert_system.add_alert(
-            title=f"Security Scan Started",
-            message=f"Deep analysis for '{repo_name}' is running in the background.",
-            severity="info"
-        )
-        
-        # Run the actual scanner
-        success = sonar.run_scanner(project_path=path, project_key=repo_name)
-        
-        if success:
-            system_metrics = sonar.get_project_metrics(project_key=repo_name)
-            bugs = system_metrics.get("bugs", 0)
-            vulns = system_metrics.get("vulnerabilities", 0)
-            
-            if vulns > 0:
-                alert_system.add_alert(
-                    title="Critical Issues Found",
-                    message=f"{repo_name}: Detected {vulns} vulnerabilities during scan. Immediate review required.",
-                    severity="critical"
-                )
-            elif bugs > 10:
-                 alert_system.add_alert(
-                    title="High Bug Count",
-                    message=f"{repo_name}: Analysis found {bugs} potential bugs. Consider checking the health panel.",
-                    severity="warning"
-                )
-            else:
-                alert_system.add_alert(
-                    title="Security Scan Complete",
-                    message=f"SonarQube completed analysis for {repo_name} successfully.",
-                    severity="success"
-                )
-            
-            return {"status": "success", "message": f"Scan completed for {repo_name}"}
-        else:
-            alert_system.add_alert(
-                title="Security Scan Failed",
-                message=f"SonarQube failed to analyze {repo_name}.",
-                severity="critical"
-            )
-            return {"status": "error", "message": f"Scan failed for {repo_name}"}
             
     def get_file_content(self, full_path: str) -> str:
         """Reads raw file content from disk."""
@@ -345,19 +263,11 @@ class LibrarianService:
         project_context = "\n".join(found_context) if found_context else "No core config files found."
 
         # 2. Extract Tech Stack & Health (Heuristics for prompt)
-        extensions = {}
-        total_bugs = 0
-        total_vulns = 0
         for node in nodes:
             label = node.get('label', '') if isinstance(node, dict) else getattr(node, 'label', '')
             if label:
                 ext = os.path.splitext(label)[1]
                 extensions[ext] = extensions.get(ext, 0) + 1
-            
-            health = node.get('sonar_health', {}) if isinstance(node, dict) else getattr(node, 'sonar_health', {})
-            if health:
-                total_bugs += health.get('bugs', 0)
-                total_vulns += health.get('vulnerabilities', 0)
 
         stack = [ext for ext in extensions if extensions[ext] > 2]
         
@@ -373,8 +283,6 @@ class LibrarianService:
         METRICS:
         - Total Files: {len(nodes)}
         - Tech Stack (inferred): {", ".join(stack)}
-        - Bugs: {total_bugs}
-        - Vulnerabilities: {total_vulns}
         
         INSTRUCTIONS:
         - Use professional tone.

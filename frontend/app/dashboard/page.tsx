@@ -118,7 +118,7 @@ export default function DashboardPage() {
           <div className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card">
             <GitBranch className="h-3.5 w-3.5 text-primary" />
           </div>
-          <span className="font-mono text-sm font-medium text-foreground">DevInsight AI</span>
+          <span className="font-mono text-sm font-medium text-foreground">KA-CHOW</span>
 
           {activeRepoName ? (
             <div className="flex items-center gap-2">

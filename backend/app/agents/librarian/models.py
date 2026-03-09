@@ -16,25 +16,14 @@ class FileNode(BaseModel):
     id: str
     label: str
     type: str # 'file' or 'folder'
-    sonar_health: Dict[str, Any] 
     layer: str 
 
-class SystemHealth(BaseModel):
-    bugs: int = 0
-    vulnerabilities: int = 0
-    code_smells: int = 0
-    coverage: float = 100.0
-    security_hotspots: float = 100.0
-    duplications: float = 0.0
-    quality_gate: str = "PASSED"
 
 class GraphResponse(BaseModel):
     project_name: str
     branch: str
     nodes: List[FileNode]
     edges: List[Dict[str, str]]
-    health_score: float
-    system_health: SystemHealth
     project_root: str 
     
 class CommitInfo(BaseModel):
@@ -53,7 +42,6 @@ class DocNode(BaseModel):
     label: str
     type: str # 'file' or 'folder'
     layer: Optional[str] = "system"
-    sonar_health: Optional[Dict[str, Any]] = None
 
 class DocEdge(BaseModel):
     source: str

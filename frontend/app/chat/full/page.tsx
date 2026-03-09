@@ -25,7 +25,7 @@ export default function FullChatPage() {
           <div className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card">
             <GitBranch className="h-3.5 w-3.5 text-primary" />
           </div>
-          <span className="font-mono text-sm font-medium text-foreground">DevInsight AI</span>
+          <span className="font-mono text-sm font-medium text-foreground">KA-CHOW</span>
           <span className="hidden rounded-md border border-border bg-secondary px-2 py-0.5 font-mono text-[10px] text-muted-foreground sm:inline-block">
             Chat
           </span>

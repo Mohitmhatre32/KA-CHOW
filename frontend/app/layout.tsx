@@ -14,7 +14,7 @@ const _jetbrainsMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'DevInsight AI - Intelligent Repository Analysis',
+  title: 'KA-CHOW - Intelligent Repository Analysis',
   description: 'Intelligent Repository Analysis & Collaboration powered by AI',
 }
 

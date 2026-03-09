@@ -120,9 +120,8 @@ export function ChatMessages({ messages: initialMessages }: { messages: ChatMess
           <div className="flex flex-col gap-6">
             {messages.map((msg) => (
               <div key={msg.id} className="flex gap-4">
-                <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border ${
-                  msg.role === "assistant" ? "bg-secondary" : "bg-accent"
-                }`}>
+                <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border ${msg.role === "assistant" ? "bg-secondary" : "bg-accent"
+                  }`}>
                   {msg.role === "assistant" ? (
                     <Bot className="h-4 w-4 text-primary" />
                   ) : (
@@ -132,7 +131,7 @@ export function ChatMessages({ messages: initialMessages }: { messages: ChatMess
                 <div className="min-w-0 flex-1">
                   <div className="mb-1 flex items-center gap-2">
                     <span className="text-sm font-medium text-foreground">
-                      {msg.role === "assistant" ? "DevInsight AI" : "You"}
+                      {msg.role === "assistant" ? "KA-CHOW" : "You"}
                     </span>
                     <span className="text-xs text-muted-foreground">{msg.timestamp}</span>
                   </div>

@@ -21,7 +21,6 @@ class AutoHealResponse(BaseModel):
 class EditorSaveRequest(BaseModel):
     file_path: str
     content: str
-    project_key: str # For Sonar
 
 class EditorResponse(BaseModel):
     status: str # "COMMITTED" or "REJECTED"

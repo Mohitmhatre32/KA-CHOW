@@ -1,18 +1,16 @@
 import os
 from app.core.llm import generate_json_response, client
-from app.core.sonar_client import sonar
 from app.core.alerts import alert_system
 from .models import EditorResponse, PRReviewResponse, AutoHealResponse
 
 class GuardianService:
     
-    def validate_and_push(self, file_path: str, content: str, project_key: str) -> EditorResponse:
+    def validate_and_push(self, file_path: str, content: str) -> EditorResponse:
         """
         Interacts with the IDE:
         1. Saves the edited code to disk.
-        2. Runs a Real-time SonarQube check.
-        3. Blocks the push and alerts the team if quality fails.
-        4. Simulates a GitHub push if quality passes.
+        2. Bypasses mandatory SonarQube checks (removed).
+        3. Simple success notification.
         """
         print(f"🛡️ Guardian Intercepting Save for: {file_path}")
         
@@ -23,49 +21,22 @@ class GuardianService:
         except Exception as e:
             return EditorResponse(
                 status="ERROR", 
-                quality_gate="ERROR", 
-                message=f"System File Error: {str(e)}", 
-                sonar_metrics={}
+                message=f"System File Error: {str(e)}"
             )
 
-        # 2. Run REAL Sonar Analysis (via our Sonar client)
-        # Note: project_key is usually the repo folder name
-        metrics = sonar.get_file_metrics(file_path, project_key)
-        quality_status = metrics.get("quality_gate", "PASSED")
-        
-        # 3. Decision Logic & Alerting
         file_name = os.path.basename(file_path)
 
-        if quality_status == "FAILED":
-            # --- ALERT THE TEAM ---
-            alert_msg = f"Quality Gate FAILED on {file_name}. Bugs: {metrics['bugs']}, Code Smells: {metrics['code_smells']}."
-            alert_system.add_alert(
-                title="❌ Blocked Bad Commit",
-                message=alert_msg,
-                severity="critical"
-            )
-            
-            return EditorResponse(
-                status="REJECTED",
-                quality_gate="FAILED",
-                message="Push Rejected: Technical debt threshold exceeded. Team Lead notified.",
-                sonar_metrics=metrics
-            )
+        # --- SIMULATE SUCCESSFUL COMMIT ---
+        alert_system.add_alert(
+            title="✅ Code Saved",
+            message=f"Changes to {file_name} were successfully written to disk.",
+            severity="success"
+        )
         
-        else:
-            # --- SIMULATE SUCCESSFUL GITHUB PUSH ---
-            alert_system.add_alert(
-                title="✅ Code Pushed",
-                message=f"Changes to {file_name} passed all Sonar checks and were pushed to main.",
-                severity="success"
-            )
-            
-            return EditorResponse(
-                status="COMMITTED",
-                quality_gate="PASSED",
-                message="Quality Gate Passed. Changes successfully pushed to GitHub.",
-                sonar_metrics=metrics
-            )
+        return EditorResponse(
+            status="COMMITTED",
+            message="Changes successfully saved to the local file system."
+        )
 
     def review_pr(self, file_name: str, code_content: str) -> PRReviewResponse:
         """Simulates a CI/CD Quality Gate block for the PR view."""
