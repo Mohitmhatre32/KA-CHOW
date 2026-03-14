@@ -1,0 +1,112 @@
+"""
+KA-CHOW Rebackend — FastAPI Application Entry Point
+"""
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+
+from app.core.alerts import alert_system
+from app.core.config import settings
+from app.agents.librarian.router import router as librarian_router
+
+# ── Future agent routers (uncomment as each agent is built) ──────────────────
+# from app.agents.architect.router import router as architect_router
+from app.agents.guardian.router import router as guardian_router
+# from app.agents.mentor.router import router as mentor_router
+
+app = FastAPI(
+    title="KA-CHOW API",
+    version=settings.VERSION,
+    description=(
+        "KA-CHOW Enterprise Brain — AI-powered developer intelligence platform. "
+        "Four agents: Librarian (graph), Architect (scaffold), Guardian (quality), Mentor (RAG coach)."
+    ),
+    docs_url="/docs",
+    redoc_url="/redoc",
+)
+
+# ── CORS ─────────────────────────────────────────────────────────────────────
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],        # Tighten to specific origins in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ── Agent Routers ─────────────────────────────────────────────────────────────
+app.include_router(librarian_router, prefix="/api/librarian", tags=["📚 Librarian"])
+# app.include_router(architect_router, prefix="/api/architect", tags=["🏗️ Architect"])
+app.include_router(guardian_router,  prefix="/api/guardian",  tags=["🛡️ Guardian"])
+# app.include_router(mentor_router,    prefix="/api/mentor",    tags=["🎓 Mentor"])
+
+# ── Static Files (Validation UI) ──────────────────────────────────────────────
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+# ── Core Endpoints ────────────────────────────────────────────────────────────
+
+@app.get("/health", tags=["System"], summary="Health check")
+def health():
+    """Used by Docker HEALTHCHECK and load balancers."""
+    return {
+        "status": "ONLINE",
+        "version": settings.VERSION,
+        "env": settings.APP_ENV,
+        "agents": {
+            "librarian": "ONLINE",
+            "architect": "PENDING",
+            "guardian":  "ONLINE",
+            "mentor":    "PENDING",
+        },
+        "unread_alerts": alert_system.unread_count,
+    }
+
+
+@app.get("/", tags=["System"], summary="Root status")
+def root():
+    return {"message": "KA-CHOW API is running. Visit /docs for the Swagger UI."}
+
+
+# ── Alert Endpoints ───────────────────────────────────────────────────────────
+
+@app.get("/api/alerts", tags=["Alerts"], summary="Get all alerts")
+def get_alerts():
+    return alert_system.get_alerts()
+
+
+@app.post("/api/alerts/{alert_id}/read", tags=["Alerts"])
+def mark_alert_read(alert_id: int):
+    found = alert_system.mark_read(alert_id)
+    return {"ok": found}
+
+
+@app.post("/api/alerts/read-all", tags=["Alerts"])
+def mark_all_read():
+    alert_system.mark_all_read()
+    return {"ok": True}
+
+
+@app.delete("/api/alerts", tags=["Alerts"])
+def clear_alerts():
+    alert_system.clear()
+    return {"ok": True}
+
+
+# ── Scan Stub (deferred — no SonarQube) ──────────────────────────────────────
+
+@app.post("/api/scan/trigger", tags=["Scan"], summary="Trigger external scan (stub)")
+def trigger_scan(project_root: str):
+    """
+    Placeholder for future SonarQube / custom scan integration.
+    Returns a 'pending' status — does NOT make any network calls.
+    The frontend Scan button hits this endpoint.
+    """
+    return JSONResponse(
+        status_code=200,
+        content={
+            "status": "pending",
+            "message": "External scan integration not yet configured. This is a safe stub.",
+            "project_root": project_root,
+        },
+    )
