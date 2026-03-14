@@ -2,7 +2,9 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Code2, Zap, Brain, Shield } from "lucide-react";
+import { Code2, Zap, Brain, Shield, ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 interface FeaturesProps {
     scrollProgress: number;
@@ -54,9 +56,8 @@ export const Features = ({ scrollProgress }: FeaturesProps) => {
         <section
             id="features-section"
             ref={featuresRef}
-            className="min-h-screen py-24 px-6 relative overflow-hidden"
+            className="min-h-screen py-24 px-6 relative overflow-hidden bg-background"
             style={{
-                background: "linear-gradient(to bottom, var(--background), #161b22)",
                 opacity,
                 transform: `translateY(${translateY}px)`,
                 transition: "opacity 400ms ease-out, transform 400ms ease-out",
@@ -64,37 +65,18 @@ export const Features = ({ scrollProgress }: FeaturesProps) => {
         >
             <div className="max-w-7xl mx-auto relative z-10">
                 {/* Section header */}
-                <div className="text-center mb-16">
-                    <div className="inline-block mb-6">
-                        <span
-                            className="px-4 py-2 rounded-full text-sm font-semibold"
-                            style={{
-                                background: "rgba(88,166,255,0.1)",
-                                border: "1px solid rgba(88,166,255,0.3)",
-                                color: "var(--primary)",
-                            }}
-                        >
-                            FEATURES
+                <div className="text-center mb-16 space-y-4">
+                    <div className="flex justify-center">
+                        <span className="badge">
+                            Features
                         </span>
                     </div>
 
-                    <h2
-                        className="text-5xl md:text-6xl font-bold mb-4 bg-clip-text text-transparent"
-                        style={{
-                            backgroundImage: "linear-gradient(to right, var(--foreground), var(--muted-foreground))",
-                            WebkitBackgroundClip: "text",
-                        }}
-                    >
+                    <h2 className="text-4xl md:text-5xl tracking-tight font-medium text-foreground">
                         Engineering Intelligence
                     </h2>
-                    <p
-                        className="text-xl bg-clip-text text-transparent max-w-2xl mx-auto"
-                        style={{
-                            backgroundImage: "linear-gradient(to right, var(--muted-foreground), #6b7280)",
-                            WebkitBackgroundClip: "text",
-                        }}
-                    >
-                        Transform how you understand and build software with AI-powered insights
+                    <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+                        Transform how you understand and build software with AI-powered insights. Deeply integrated tools for the modern developer.
                     </p>
                 </div>
 
@@ -111,41 +93,17 @@ export const Features = ({ scrollProgress }: FeaturesProps) => {
                                 key={index}
                                 onMouseEnter={() => setHoveredCard(index)}
                                 onMouseLeave={() => setHoveredCard(null)}
-                                className="group relative rounded-2xl p-8
-                           transition-all duration-500
-                           overflow-hidden"
+                                className={`group relative rounded-xl p-8 border bg-card/50 transition-all duration-400
+                                ${hoveredCard === index ? "border-primary/50 bg-primary/[0.02]" : "border-border"}`}
                                 style={{
-                                    background: "linear-gradient(135deg, #161b22, var(--background))",
-                                    border: hoveredCard === index
-                                        ? "1px solid rgba(88,166,255,0.5)"
-                                        : "1px solid var(--border)",
-                                    boxShadow: hoveredCard === index
-                                        ? "0 0 60px rgba(88,166,255,0.15)"
-                                        : "none",
                                     opacity: featureOpacity,
                                     transform: `translateY(${(1 - featureOpacity) * 20}px)`,
-                                    transition: "all 400ms ease-out",
                                     transitionDelay: `${index * 100}ms`,
                                 }}
                             >
                                 <div
-                                    className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500
-                    bg-gradient-to-r ${feature.gradient} blur-xl -z-10`}
-                                />
-
-                                <div
-                                    className={`relative w-14 h-14 rounded-xl
-                    flex items-center justify-center mb-6 transition-all duration-300
-                    ${hoveredCard === index ? "scale-110" : ""}`}
-                                    style={{
-                                        background: "linear-gradient(135deg, rgba(88,166,255,0.3), rgba(88,166,255,0.1))",
-                                        border: hoveredCard === index
-                                            ? "1px solid var(--primary)"
-                                            : "1px solid rgba(88,166,255,0.3)",
-                                        boxShadow: hoveredCard === index
-                                            ? "0 0 20px rgba(88,166,255,0.3)"
-                                            : "none",
-                                    }}
+                                    className={`relative w-12 h-12 rounded-lg border flex items-center justify-center mb-6 transition-all duration-300
+                                    ${hoveredCard === index ? "border-primary bg-primary/20" : "border-border bg-muted/30"}`}
                                 >
                                     <Icon
                                         className="w-7 h-7 transition-transform duration-300 group-hover:scale-125"
@@ -186,30 +144,16 @@ export const Features = ({ scrollProgress }: FeaturesProps) => {
 
                 {/* Bottom CTA */}
                 <div className="text-center">
-                    <button
+                    <Button
+                        size="lg"
+                        className={`h-14 px-10 text-lg transition-all duration-500
+                        ${scrollProgress > 0.7 ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"}`}
                         onClick={() => router.push("/import-repository")}
-                        className="group relative px-10 py-5 text-white rounded-xl font-semibold text-lg
-                       transition-all duration-300 ease-out
-                       hover:scale-110 active:scale-95
-                       overflow-hidden"
-                        style={{
-                            background: "linear-gradient(135deg, var(--primary), #1f6feb)",
-                            border: "1px solid rgba(88,166,255,0.5)",
-                            opacity: scrollProgress > 0.7 ? Math.min(1, (scrollProgress - 0.7) / 0.2) : 0,
-                            transform: scrollProgress > 0.7 ? "translateY(0)" : "translateY(30px)",
-                            transition: "all 400ms ease-out",
-                            pointerEvents: scrollProgress > 0.7 ? "auto" : "none",
-                            boxShadow: "0 0 60px rgba(88,166,255,0.3)",
-                        }}
+                        style={{ pointerEvents: scrollProgress > 0.7 ? "auto" : "none" }}
                     >
-                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                        <span className="relative inline-flex items-center gap-2">
-                            Launch Now
-                            <svg className="w-5 h-5 transition-transform duration-300 group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                            </svg>
-                        </span>
-                    </button>
+                        Launch Now
+                        <ArrowRight className="ml-2 h-5 w-5" />
+                    </Button>
                 </div>
             </div>
 
