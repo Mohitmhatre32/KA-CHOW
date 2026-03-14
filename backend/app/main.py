@@ -8,6 +8,7 @@ from app.agents.architect.router import router as architect_router # <-- ADD THI
 from app.agents.guardian.router import router as guardian_router
 from app.agents.mentor.router import router as mentor_router
 from app.api.auth import router as auth_router # <-- ADD THIS
+from app.api.mobile import router as mobile_router
 from app.core.alerts import alert_system
 
 app = FastAPI(title="KA-CHOW Enterprise Brain", version="2.0")
@@ -26,6 +27,7 @@ app.include_router(architect_router, prefix="/api/architect", tags=["The Archite
 app.include_router(guardian_router, prefix="/api/guardian", tags=["The Guardian"])
 app.include_router(mentor_router, prefix="/api/v1/mentor", tags=["The Mentor"])
 app.include_router(auth_router, prefix="/api/github", tags=["GitHub Auth"]) # <-- ADD THIS
+app.include_router(mobile_router, prefix="/api/mobile", tags=["Mobile Adapter"])
 
 app.mount("/demo", StaticFiles(directory="app/static", html=True), name="static")
 
