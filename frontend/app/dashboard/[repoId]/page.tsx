@@ -12,6 +12,7 @@ import {
   Compass,
   Loader2,
   LayoutGrid,
+  GitFork,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -36,7 +37,6 @@ import { triggerSonarScan } from "@/lib/api"
 import { GraphView } from "@/components/dashboard/graph-view"
 import { ChatPanel } from "@/components/dashboard/chat-panel"
 import { HealthPanel } from "@/components/dashboard/health-panel"
-import { RepoSwitcher } from "@/components/dashboard/repo-switcher"
 import { GuardianView } from "@/components/dashboard/guardian-view"
 import { MentorView } from "@/components/dashboard/mentor-view"
 import { ArchitectView } from "@/components/dashboard/architect-view"
@@ -214,30 +214,36 @@ export default function DashboardPage() {
 
       {/* ─── MAIN CONTENT GROUP ─── */}
       <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
-        {/* Sidebar Panel */}
+        {/* Sidebar Panel — AI Agents only, no repo switcher */}
         <ResizablePanel
-          defaultSize={20}
-          minSize={15}
-          maxSize={30}
+          defaultSize={18}
+          minSize={14}
+          maxSize={26}
           collapsible={true}
           onCollapse={() => setSidebarCollapsed(true)}
           onExpand={() => setSidebarCollapsed(false)}
           className={`flex flex-col bg-sidebar border-r border-border transition-all duration-300 ${sidebarCollapsed ? "max-w-[0px]" : ""}`}
         >
           {/* Sidebar Header */}
-          <div className="flex shrink-0 items-center justify-between border-b border-border px-4 h-10">
+          <div className="flex shrink-0 items-center border-b border-border px-4 h-10">
             <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground m-0">
-              Explorer
+              AI Agents
             </h2>
           </div>
 
-          {/* Sidebar Content (Repo Switcher) */}
-          <div className="flex-1 overflow-hidden">
-            <RepoSwitcher />
-          </div>
+          {/* Agent Navigation — fills full sidebar */}
+          <div className="flex-1 overflow-y-auto p-2 space-y-1">
+            <AgentTab
+              active={mainView === "graph"}
+              onClick={() => setMainView("graph")}
+              icon={GitFork}
+              title="Knowledge Graph"
+              subtitle="Dependency explorer"
+              variant="primary"
+            />
 
-          {/* ─── BOTTOM AGENT STACK ─── */}
-          <div className="shrink-0 border-t border-border p-2 space-y-1 bg-muted/10">
+            <div className="my-2 h-px bg-border" />
+
             <AgentTab
               active={mainView === "guardian"}
               onClick={() => toggleMainView("guardian")}
