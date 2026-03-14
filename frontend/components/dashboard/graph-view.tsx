@@ -11,12 +11,18 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { generateDocs, type DocsResponse } from "@/lib/api"
+import { Button } from "@/components/ui/button"
 import { DocsModal } from "./docs-modal"
 
 // --- Constants & Labels ---
 const typeColors: Record<GraphNode["type"], string> = {
-  module: "#58a6ff", component: "#3fb950", utility: "#d29922", api: "#f85149", hook: "#bc8cff",
-  file: "#a5d6ff", folder: "#8b949e",
+  module: "var(--primary)", 
+  component: "var(--success)", 
+  utility: "var(--warning)", 
+  api: "var(--destructive)", 
+  hook: "var(--accent)",
+  file: "var(--muted-foreground)", 
+  folder: "var(--border)",
 }
 
 const typeLabels: Record<GraphNode["type"], string> = {
@@ -199,7 +205,7 @@ export function GraphView() {
   }
 
   return (
-    <div className="relative h-full w-full overflow-hidden rounded-lg bg-background font-sans">
+    <div className="relative h-full w-full overflow-hidden rounded-lg bg-background">
 
       {/* 1. RESTORED: Top Left Live Status Badge */}
       {isLive && graphMeta && (
@@ -264,7 +270,6 @@ export function GraphView() {
 
       <svg
         ref={svgRef}
-        className={`h-full w-full transition-opacity duration-1000 ${mounted ? "opacity-100" : "opacity-0"}`}
         viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`}
         onWheel={handleWheel}
         onMouseDown={(e) => {
@@ -277,7 +282,7 @@ export function GraphView() {
         onMouseUp={() => setIsPanning(false)}
         onMouseLeave={() => setIsPanning(false)}
         onClick={() => setSelectedNodeId(null)}
-        style={{ cursor: isPanning ? "grabbing" : "grab" }}
+        className={`h-full w-full transition-opacity duration-1000 ${mounted ? "opacity-100" : "opacity-0"} ${isPanning ? "cursor-grabbing" : "cursor-grab"}`}
       >
         <defs>
           <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
@@ -293,9 +298,9 @@ export function GraphView() {
           return (
             <line
               key={i} x1={edge.x1} y1={edge.y1} x2={edge.x2} y2={edge.y2}
-              stroke={isHighlighted ? "#58a6ff" : "#ffffff"}
+              stroke={isHighlighted ? "var(--primary)" : "var(--border)"}
               strokeWidth={isHighlighted ? 2 : 1}
-              strokeOpacity={isHighlighted ? 0.8 : 0.6}
+              strokeOpacity={isHighlighted ? 0.8 : 0.4}
               strokeDasharray="4 4" className="animated-edge transition-all duration-300"
             />
           )
@@ -325,15 +330,14 @@ export function GraphView() {
               {node.sonar_health && (
                 <circle
                   cx={radius - 6} cy={-radius + 6} r={5}
-                  fill={node.sonar_health.quality_gate === "PASSED" ? "#3fb950" : "#f85149"}
-                  className="animate-pulse"
+                  className={`animate-pulse ${node.sonar_health.quality_gate === "PASSED" ? "fill-success" : "fill-destructive"}`}
                 />
               )}
 
               <foreignObject x={-9} y={-9} width={18} height={18} className="pointer-events-none">
-                <IconComponent color={typeColors[node.type]} size={18} />
+                <IconComponent style={{ color: typeColors[node.type] }} size={18} />
               </foreignObject>
-              <text y={34} textAnchor="middle" fill="#e6edf3" fontSize="10" fontWeight="600" className="select-none pointer-events-none transition-colors group-hover:fill-primary">
+              <text y={34} textAnchor="middle" fill="var(--foreground)" fontSize="10" fontWeight="600" className="select-none pointer-events-none transition-colors opacity-70 group-hover:opacity-100">
                 {node.label}
               </text>
             </g>
@@ -348,12 +352,19 @@ export function GraphView() {
               onWheel={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
             >
-              <div className="flex items-start justify-between border-b border-border p-3 bg-secondary/10">
+              <div className="flex items-start justify-between border-b border-border p-3 bg-muted/30 backdrop-blur-md">
                 <div className="overflow-hidden">
                   <h3 className="text-xs font-bold text-foreground truncate">{selectedNode.label}</h3>
-                  <p className="font-mono text-[8px] text-muted-foreground truncate">{selectedNode.path || `src/${selectedNode.type}s/${selectedNode.label.toLowerCase()}.tsx`}</p>
+                  <p className="font-mono text-[8px] text-muted-foreground truncate opacity-70">{selectedNode.path || `src/${selectedNode.type}s/${selectedNode.label.toLowerCase()}.tsx`}</p>
                 </div>
-                <button onClick={() => setSelectedNodeId(null)} className="p-1 hover:bg-secondary rounded-md transition-colors"><X className="h-3.5 w-3.5 text-muted-foreground" /></button>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={() => setSelectedNodeId(null)} 
+                  className="h-6 w-6 hover:bg-destructive/10 hover:text-destructive transition-colors"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
               </div>
               <div className="flex-1 overflow-y-auto p-3 card-scroll space-y-3">
                 {selectedNode.sonar_health && Object.keys(selectedNode.sonar_health).length > 0 ? (

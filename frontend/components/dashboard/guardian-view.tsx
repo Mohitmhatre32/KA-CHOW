@@ -20,7 +20,10 @@ import {
     ChevronDown,
     Save,
     Trash2,
+    BadgeCheck,
 } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import {
     guardianReviewPR,
     guardianAutoHeal,
@@ -50,14 +53,14 @@ type ViewState = "idle" | "reviewing" | "reviewed" | "healing" | "healed"
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
-function GlowPulse({ color = "emerald" }: { color?: "rose" | "amber" | "emerald" }) {
+function GlowPulse({ color = "success" }: { color?: "destructive" | "warning" | "success" }) {
     const colorMap = {
-        rose: "bg-rose-500",
-        amber: "bg-amber-500",
-        emerald: "bg-emerald-500",
+        destructive: "bg-destructive",
+        warning: "bg-warning",
+        success: "bg-success",
     }
     return (
-        <span className={`relative flex h-2 w-2`}>
+        <span className="relative flex h-2 w-2">
             <span className={`absolute inline-flex h-full w-full animate-ping rounded-full ${colorMap[color]} opacity-75`} />
             <span className={`relative inline-flex h-2 w-2 rounded-full ${colorMap[color]}`} />
         </span>
@@ -78,28 +81,33 @@ function MetricCard({
     icon: React.ElementType
 }) {
     const statusStyles = {
-        fail: "border-rose-500/30 bg-rose-500/5",
-        warn: "border-amber-500/30 bg-amber-500/5",
-        pass: "border-emerald-500/30 bg-emerald-500/5",
+        fail: "border-destructive/30 bg-destructive/5",
+        warn: "border-warning/30 bg-warning/5",
+        pass: "border-success/30 bg-success/5",
     }
-    const valueStyles = { fail: "text-rose-400", warn: "text-amber-400", pass: "text-emerald-400" }
+    const valueStyles = { 
+        fail: "text-destructive", 
+        warn: "text-warning", 
+        pass: "text-success" 
+    }
     const iconBg = {
-        fail: "border-rose-500/20 bg-rose-500/10",
-        warn: "border-amber-500/20 bg-amber-500/10",
-        pass: "border-emerald-500/20 bg-emerald-500/10",
+        fail: "border-destructive/20 bg-destructive/10",
+        warn: "border-warning/20 bg-warning/10",
+        pass: "border-success/20 bg-success/10",
     }
-    const iconColor = { fail: "text-rose-500", warn: "text-amber-500", pass: "text-emerald-500" }
+    const iconColor = { 
+        fail: "text-destructive", 
+        warn: "text-warning", 
+        pass: "text-success" 
+    }
 
     return (
-        <div
-            className={`relative overflow-hidden rounded-xl border p-4 backdrop-blur-sm ${statusStyles[status]}`}
-            style={{ background: "rgba(15, 15, 25, 0.6)" }}
-        >
+        <div className={`relative overflow-hidden rounded-xl border p-4 bg-card/50 backdrop-blur-sm ${statusStyles[status]}`}>
             <div className="flex items-start justify-between">
                 <div>
-                    <p className="mb-1 text-xs font-medium uppercase tracking-wider text-zinc-500">{title}</p>
+                    <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{title}</p>
                     <p className={`font-mono text-2xl font-bold ${valueStyles[status]}`}>{value}</p>
-                    {sub && <p className="mt-1 font-mono text-xs text-zinc-500">{sub}</p>}
+                    {sub && <p className="mt-1 font-mono text-[10px] text-muted-foreground opacity-70">{sub}</p>}
                 </div>
                 <div className={`flex h-9 w-9 items-center justify-center rounded-lg border ${iconBg[status]}`}>
                     <Icon className={`h-4 w-4 ${iconColor[status]}`} />
@@ -128,15 +136,15 @@ function CodePane({
     return (
         <div className="flex h-full flex-col overflow-hidden">
             <div
-                className={`flex items-center gap-2 border-b px-4 py-2.5 ${side === "left" ? "border-rose-500/20 bg-rose-950/20" : "border-emerald-500/20 bg-emerald-950/20"}`}
+                className={`flex items-center gap-2 border-b px-4 py-2.5 ${side === "left" ? "border-destructive/20 bg-destructive/5" : "border-success/20 bg-success/5"}`}
             >
-                <FileCode className={`h-3.5 w-3.5 ${side === "left" ? "text-rose-400" : "text-emerald-400"}`} />
-                <span className={`font-mono text-xs font-semibold truncate max-w-[200px] ${side === "left" ? "text-rose-300" : "text-emerald-300"}`}>
+                <FileCode className={`h-3.5 w-3.5 ${side === "left" ? "text-destructive" : "text-success"}`} />
+                <span className={`font-mono text-[10px] font-bold uppercase tracking-tight truncate max-w-[200px] ${side === "left" ? "text-destructive" : "text-success"}`}>
                     {title}
                 </span>
-                <span className={`ml-auto shrink-0 rounded-full border px-2 py-0.5 font-mono text-[10px] ${side === "left" ? "border-rose-500/30 bg-rose-500/10 text-rose-400" : "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"}`}>
+                <Badge variant="outline" className={`ml-auto shrink-0 font-mono text-[9px] ${side === "left" ? "border-destructive/30 text-destructive bg-destructive/5" : "border-success/30 text-success bg-success/5"}`}>
                     {side === "left" ? "ORIGINAL" : "AI HEALED"}
-                </span>
+                </Badge>
             </div>
             <div className="flex-1 overflow-auto">
                 <table className="w-full border-collapse">
@@ -150,27 +158,27 @@ function CodePane({
                             return (
                                 <tr
                                     key={i}
-                                    className={`group relative transition-colors ${side === "left" && hasAnnotation ? "bg-rose-500/8 hover:bg-rose-500/15" : ""} ${side === "right" && isHealed ? "bg-emerald-500/8 hover:bg-emerald-500/15" : "hover:bg-white/[0.02]"}`}
+                                    className={`group relative transition-colors ${side === "left" && hasAnnotation ? "bg-destructive/10" : ""} ${side === "right" && isHealed ? "bg-success/10" : "hover:bg-muted/30"}`}
                                     onMouseEnter={() => setHoveredLine(lineNum)}
                                     onMouseLeave={() => setHoveredLine(null)}
                                 >
-                                    <td className="w-12 select-none border-r border-white/5 pr-3 text-right font-mono text-[11px] text-zinc-600">
+                                    <td className="w-12 select-none border-r border-border pr-3 text-right font-mono text-[10px] text-muted-foreground opacity-50">
                                         {lineNum}
                                     </td>
-                                    <td className="w-4 select-none text-center font-mono text-[11px]">
-                                        {side === "left" && hasAnnotation && <span className="text-rose-500">-</span>}
-                                        {side === "right" && isHealed && <span className="text-emerald-500">+</span>}
+                                    <td className="w-4 select-none text-center font-mono text-[10px]">
+                                        {side === "left" && hasAnnotation && <span className="text-destructive">-</span>}
+                                        {side === "right" && isHealed && <span className="text-success">+</span>}
                                     </td>
-                                    <td className="w-full px-2 py-[1px]">
-                                        <pre className={`font-mono text-[11.5px] leading-5 ${side === "left" && hasAnnotation ? "text-rose-200" : side === "right" && isHealed ? "text-emerald-200" : "text-zinc-300"}`}>
+                                    <td className="w-full px-2 py-0.5">
+                                        <pre className={`font-mono text-[11px] leading-relaxed ${side === "left" && hasAnnotation ? "text-destructive-foreground opacity-90" : side === "right" && isHealed ? "text-success opacity-90" : "text-foreground opacity-70"}`}>
                                             {line || " "}
                                         </pre>
                                     </td>
                                     {side === "left" && hasAnnotation && isHovered && (
                                         <td className="w-0 overflow-visible">
-                                            <div className="absolute right-2 top-0 z-10 flex items-center gap-1.5 rounded-md border border-rose-500/40 bg-zinc-950 px-2.5 py-1 shadow-lg shadow-rose-950/50">
-                                                <AlertTriangle className="h-3 w-3 text-rose-400" />
-                                                <span className="whitespace-nowrap font-mono text-[10px] text-rose-300">
+                                            <div className="absolute right-2 top-0 z-10 flex items-center gap-2 rounded-md border border-destructive/40 bg-card px-2.5 py-1 shadow-xl">
+                                                <AlertTriangle className="h-3 w-3 text-destructive" />
+                                                <span className="whitespace-nowrap font-mono text-[9px] text-destructive italic">
                                                     Line {lineNum}: {hasAnnotation}
                                                 </span>
                                             </div>
@@ -239,14 +247,16 @@ function FileSelectorPanel({
                 )}
             </div>
 
-            <button
+            <Button
                 onClick={onLoad}
                 disabled={!selectedPath || isLoading}
-                className="flex items-center gap-2 rounded-lg border border-indigo-500/40 bg-indigo-950/30 px-3 py-2 font-mono text-xs text-indigo-300 transition-all hover:border-indigo-400/60 hover:bg-indigo-900/30 disabled:cursor-not-allowed disabled:opacity-40"
+                variant="outline"
+                size="sm"
+                className="h-9 gap-2 font-mono text-xs border-primary/30 text-primary hover:bg-primary/10 transition-all disabled:opacity-40"
             >
                 {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderOpen className="h-3.5 w-3.5" />}
                 Load File
-            </button>
+            </Button>
         </div>
     )
 }
@@ -438,10 +448,7 @@ export function GuardianView() {
     const prLabel = activeFileName ? activeFileName : "No file loaded"
 
     return (
-        <div
-            className="relative h-full overflow-y-auto"
-            style={{ background: "linear-gradient(135deg, #0a0d17 0%, #0d1120 50%, #0a0f1c 100%)" }}
-        >
+        <div className="relative h-full overflow-y-auto bg-background/50">
             {/* ── SAVE SUCCESS TOAST ── */}
             <div
                 className={`pointer-events-none fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-xl border border-emerald-500/40 px-5 py-3 shadow-2xl transition-all duration-500 ${showSaveToast
@@ -468,11 +475,7 @@ export function GuardianView() {
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div className="flex items-start gap-4">
                         <div
-                            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-rose-500/30"
-                            style={{
-                                background: "radial-gradient(circle at center, rgba(239,68,68,0.15), rgba(239,68,68,0.03))",
-                                boxShadow: "0 0 30px rgba(239,68,68,0.15)",
-                            }}
+                            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-destructive/30 bg-destructive/5"
                         >
                             <ShieldAlert className="h-7 w-7 text-rose-400" />
                         </div>
@@ -482,12 +485,12 @@ export function GuardianView() {
                                     The Guardian
                                 </h1>
                                 <span
-                                    className="rounded-full border border-rose-500/40 px-2.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-widest text-rose-400"
-                                    style={{ background: "rgba(239,68,68,0.08)" }}
+                                    className="rounded-full border border-destructive/40 px-2.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-widest text-destructive"
+                                    style={{ background: "var(--destructive-muted)" }}
                                 >
                                     CI/CD Enforcer
                                 </span>
-                                <GlowPulse color="rose" />
+                                <GlowPulse color="destructive" />
                             </div>
                             <p className="mt-0.5 font-mono text-xs text-zinc-500">
                                 Intercepting Webhooks &amp; Enforcing Quality Gates
@@ -515,23 +518,26 @@ export function GuardianView() {
 
                         <div className="flex gap-2">
                             {viewState === "idle" && (
-                                <button
+                                <Button
                                     onClick={handleReview}
                                     disabled={!hasFile}
-                                    className="flex items-center gap-2 rounded-lg border border-zinc-700/50 bg-zinc-800/80 px-4 py-2 font-mono text-xs text-zinc-300 transition-all hover:border-zinc-600 hover:bg-zinc-700/80 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                                    variant="outline"
+                                    className="gap-2 font-mono text-xs border-border bg-card/50 hover:bg-muted transition-all"
                                 >
                                     <ShieldAlert className="h-3.5 w-3.5" />
                                     Run CI/CD Review
-                                </button>
+                                </Button>
                             )}
                             {viewState !== "idle" && (
-                                <button
+                                <Button
                                     onClick={handleReset}
-                                    className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/80 px-3 py-2 font-mono text-[11px] text-zinc-500 transition-all hover:border-zinc-700 hover:text-zinc-400"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="gap-2 font-mono text-[10px] text-muted-foreground hover:text-foreground"
                                 >
                                     <RefreshCw className="h-3 w-3" />
                                     Reset
-                                </button>
+                                </Button>
                             )}
                         </div>
                     </div>
@@ -631,12 +637,7 @@ export function GuardianView() {
                                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                                     {/* Overall status — dynamic */}
                                     <div
-                                        className={`col-span-full flex items-center justify-between rounded-xl border px-5 py-4 ${isBlocked ? "border-rose-500/30" : "border-emerald-500/30"}`}
-                                        style={{
-                                            background: isBlocked
-                                                ? "radial-gradient(ellipse at top left, rgba(239,68,68,0.08), rgba(13,17,32,0.9))"
-                                                : "radial-gradient(ellipse at top left, rgba(16,185,129,0.08), rgba(13,17,32,0.9))",
-                                        }}
+                                        className={`col-span-full flex items-center justify-between rounded-xl border px-5 py-4 ${isBlocked ? "border-destructive/30 bg-destructive/5" : "border-success/30 bg-success/5"}`}
                                     >
                                         <div className="flex items-center gap-3">
                                             {isBlocked ? (
@@ -657,8 +658,8 @@ export function GuardianView() {
                                             </div>
                                         </div>
                                         <div className="hidden sm:flex sm:items-center sm:gap-2">
-                                            <GlowPulse color={isBlocked ? "rose" : "emerald"} />
-                                            <span className={`font-mono text-[10px] uppercase tracking-widest ${isBlocked ? "text-rose-500/60" : "text-emerald-500/60"}`}>Live</span>
+                                            <GlowPulse color={isBlocked ? "destructive" : "success"} />
+                                            <span className={`font-mono text-[10px] uppercase tracking-widest ${isBlocked ? "text-destructive/60" : "text-success/60"}`}>Live</span>
                                         </div>
                                     </div>
 
@@ -724,15 +725,7 @@ export function GuardianView() {
                                 </div>
 
                                 <div
-                                    className={`flex flex-1 flex-col gap-4 rounded-xl border p-5 ${isBlocked ? "border-rose-500/25" : "border-emerald-500/25"}`}
-                                    style={{
-                                        background: isBlocked
-                                            ? "radial-gradient(ellipse at top right, rgba(239,68,68,0.1), rgba(13,17,32,0.95))"
-                                            : "radial-gradient(ellipse at top right, rgba(16,185,129,0.08), rgba(13,17,32,0.95))",
-                                        boxShadow: isBlocked
-                                            ? "0 0 40px rgba(239,68,68,0.08) inset"
-                                            : "0 0 40px rgba(16,185,129,0.06) inset",
-                                    }}
+                                    className={`flex flex-1 flex-col gap-4 rounded-xl border p-5 bg-card/30 backdrop-blur-sm ${isBlocked ? "border-destructive/25 shadow-[inset_0_0_40px_rgba(var(--destructive),0.05)]" : "border-success/25 shadow-[inset_0_0_40px_rgba(var(--success),0.05)]"}`}
                                 >
                                     <div className="flex items-center gap-3">
                                         <div className={`flex h-10 w-10 items-center justify-center rounded-xl border ${isBlocked ? "border-rose-500/30 bg-rose-500/10" : "border-emerald-500/30 bg-emerald-500/10"}`}>
@@ -803,27 +796,20 @@ export function GuardianView() {
                                 </div>
 
                                 {viewState !== "healed" && (
-                                    <button
+                                    <Button
                                         onClick={handleHeal}
                                         disabled={viewState === "healing"}
-                                        className={`relative flex items-center gap-2.5 overflow-hidden rounded-xl border px-5 py-2.5 font-mono text-sm font-semibold transition-all duration-300 ${viewState === "healing"
-                                            ? "cursor-not-allowed border-emerald-500/20 bg-emerald-950/30 text-emerald-500/50"
-                                            : "border-emerald-500/40 text-emerald-300 hover:border-emerald-400/60 hover:text-emerald-200"
-                                            }`}
-                                        style={viewState !== "healing" ? {
-                                            background: "radial-gradient(ellipse at center, rgba(16,185,129,0.12), rgba(13,17,32,0.9))",
-                                            boxShadow: "0 0 20px rgba(16,185,129,0.15), 0 0 60px rgba(16,185,129,0.05)",
-                                        } : undefined}
+                                        variant="outline"
+                                        size="lg"
+                                        className={`relative w-full gap-2.5 font-mono text-sm font-bold border-success/40 text-success hover:bg-success/10 transition-all duration-300 ${viewState === "healing" ? "opacity-50" : ""}`}
                                     >
                                         {viewState === "healing" ? (
                                             <RefreshCw className="h-4 w-4 animate-spin" />
                                         ) : (
                                             <Sparkles className="h-4 w-4" />
                                         )}
-                                        <span className="relative">
-                                            {viewState === "healing" ? "Running Self-Healing…" : "Run Autonomous Self-Healing"}
-                                        </span>
-                                    </button>
+                                        {viewState === "healing" ? "Running Self-Healing…" : "Run Autonomous Self-Healing"}
+                                    </Button>
                                 )}
 
                                 {viewState === "healed" && (
@@ -836,10 +822,9 @@ export function GuardianView() {
 
                             {/* Split-pane diff viewer */}
                             <div
-                                className="grid overflow-hidden rounded-2xl border border-zinc-800/80"
+                                className="grid overflow-hidden rounded-2xl border border-border bg-card/50 backdrop-blur-sm"
                                 style={{
                                     gridTemplateColumns: "1fr 1fr",
-                                    background: "rgba(8,10,18,0.95)",
                                     minHeight: "420px",
                                     maxHeight: "520px",
                                 }}
@@ -870,17 +855,17 @@ export function GuardianView() {
                                             side="right"
                                         />
                                     ) : viewState === "healing" ? (
-                                        <div className="flex h-full items-center justify-center">
+                                        <div className="flex h-full items-center justify-center bg-success/5">
                                             <div className="flex flex-col items-center gap-4">
-                                                <Sparkles className="h-10 w-10 animate-pulse text-emerald-400" />
-                                                <p className="font-mono text-xs text-zinc-500">
-                                                    Guardian AI is rewriting <span className="text-zinc-300">{activeFileName}</span>…
+                                                <Sparkles className="h-10 w-10 animate-pulse text-success" />
+                                                <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                                                    Guardian AI is rewriting <span className="text-foreground">{activeFileName}</span>…
                                                 </p>
                                                 <div className="flex gap-1">
                                                     {[0, 1, 2, 3].map((i) => (
                                                         <div
                                                             key={i}
-                                                            className="h-1 w-6 animate-pulse rounded-full bg-emerald-500/30"
+                                                            className="h-1 w-6 animate-pulse rounded-full bg-success/30"
                                                             style={{ animationDelay: `${i * 0.15}s` }}
                                                         />
                                                     ))}
@@ -889,16 +874,11 @@ export function GuardianView() {
                                         </div>
                                     ) : (
                                         <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-                                            <div
-                                                className="flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-500/20"
-                                                style={{ background: "rgba(16,185,129,0.05)" }}
-                                            >
-                                                <Sparkles className="h-6 w-6 text-emerald-500/40" />
+                                            <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-success/20 bg-success/5">
+                                                <Sparkles className="h-6 w-6 text-success/40" />
                                             </div>
-                                            <p className="font-mono text-xs text-zinc-600">
-                                                Click{" "}
-                                                <span className="text-emerald-500">"Run Autonomous Self-Healing"</span>
-                                                {" "}to generate the refactored code.
+                                            <p className="font-mono text-[10px] text-muted-foreground uppercase tracking-widest leading-relaxed">
+                                                Click <span className="text-success">"Run Autonomous Self-Healing"</span> to generate the refactored code.
                                             </p>
                                         </div>
                                     )}
@@ -908,51 +888,49 @@ export function GuardianView() {
                             {/* Diff legend */}
                             <div className="flex items-center gap-6 px-1">
                                 <div className="flex items-center gap-1.5">
-                                    <span className="font-mono text-sm font-bold text-rose-500">-</span>
-                                    <span className="font-mono text-[11px] text-zinc-600">Problematic lines</span>
+                                    <span className="font-mono text-sm font-bold text-destructive">-</span>
+                                    <span className="font-mono text-[9px] uppercase tracking-tight text-muted-foreground opacity-60">Problematic lines</span>
                                 </div>
                                 <div className="flex items-center gap-1.5">
-                                    <span className="font-mono text-sm font-bold text-emerald-500">+</span>
-                                    <span className="font-mono text-[11px] text-zinc-600">AI-healed additions</span>
+                                    <span className="font-mono text-sm font-bold text-success">+</span>
+                                    <span className="font-mono text-[9px] uppercase tracking-tight text-muted-foreground opacity-60">AI-healed additions</span>
                                 </div>
                                 <div className="flex items-center gap-1.5">
-                                    <AlertTriangle className="h-3 w-3 text-rose-400" />
-                                    <span className="font-mono text-[11px] text-zinc-600">Hover left pane lines for issue details</span>
+                                    <AlertTriangle className="h-3 w-3 text-warning opacity-70" />
+                                    <span className="font-mono text-[9px] uppercase tracking-tight text-muted-foreground opacity-60">Hover left pane lines for issue details</span>
                                 </div>
                             </div>
 
                             {/* ── SAVE / DISCARD ACTION BAR (shown when healed) ── */}
                             {viewState === "healed" && (
-                                <div
-                                    className="flex items-center justify-between rounded-xl border border-emerald-500/20 px-5 py-3"
-                                    style={{ background: "rgba(16,185,129,0.06)" }}
-                                >
+                                <div className="flex items-center justify-between rounded-xl border border-success/20 bg-success/5 px-5 py-3 backdrop-blur-sm">
                                     <div className="flex items-center gap-3">
-                                        <CheckCircle className="h-4 w-4 text-emerald-400" />
+                                        <BadgeCheck className="h-4 w-4 text-success" />
                                         <div>
-                                            <p className="font-mono text-xs font-semibold text-emerald-300">
+                                            <p className="font-mono text-[10px] font-bold uppercase tracking-wider text-success">
                                                 AI Healing Complete
                                             </p>
-                                            <p className="font-mono text-[10px] text-zinc-600">
+                                            <p className="font-mono text-[9px] text-muted-foreground opacity-70 uppercase tracking-tighter">
                                                 Save to write healed code back to disk — or discard to keep the original.
                                             </p>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        {/* Discard */}
-                                        <button
+                                        <Button
                                             onClick={handleDiscard}
                                             disabled={saveState === "saving"}
-                                            className="flex items-center gap-2 rounded-lg border border-zinc-700/60 bg-zinc-800/60 px-4 py-2 font-mono text-xs text-zinc-400 transition-all hover:border-zinc-600 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-8 gap-2 font-mono text-[10px] text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                                         >
                                             <Trash2 className="h-3.5 w-3.5" />
                                             Discard
-                                        </button>
-                                        {/* Save */}
-                                        <button
+                                        </Button>
+                                        <Button
                                             onClick={handleSave}
                                             disabled={saveState === "saving" || saveState === "saved"}
-                                            className="flex items-center gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-5 py-2 font-mono text-xs font-semibold text-emerald-300 transition-all hover:border-emerald-400/60 hover:bg-emerald-500/15 hover:text-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
+                                            size="sm"
+                                            className="h-8 gap-2 font-mono text-[10px] font-bold bg-success text-success-foreground hover:bg-success/90"
                                         >
                                             {saveState === "saving" ? (
                                                 <RefreshCw className="h-3.5 w-3.5 animate-spin" />
@@ -962,7 +940,7 @@ export function GuardianView() {
                                                 <Save className="h-3.5 w-3.5" />
                                             )}
                                             {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved!" : "Save to Disk"}
-                                        </button>
+                                        </Button>
                                     </div>
                                 </div>
                             )}
@@ -972,34 +950,25 @@ export function GuardianView() {
 
                 {/* ── IDLE STATE ── */}
                 {viewState === "idle" && (
-                    <div
-                        className="flex flex-col items-center justify-center gap-6 rounded-2xl border border-zinc-800/60 py-20"
-                        style={{ background: "rgba(14,17,29,0.6)" }}
-                    >
-                        <div
-                            className="flex h-20 w-20 items-center justify-center rounded-3xl border border-rose-500/20"
-                            style={{
-                                background: "radial-gradient(circle, rgba(239,68,68,0.1), rgba(13,17,32,0.8))",
-                                boxShadow: "0 0 40px rgba(239,68,68,0.1)",
-                            }}
-                        >
-                            <ShieldAlert className="h-10 w-10 text-rose-400" />
+                    <div className="flex flex-col items-center justify-center gap-6 rounded-2xl border border-border bg-card/30 py-20 backdrop-blur-sm">
+                        <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-destructive/20 bg-destructive/5 shadow-[0_0_40px_rgba(var(--destructive),0.1)]">
+                            <ShieldAlert className="h-10 w-10 text-destructive" />
                         </div>
                         <div className="text-center">
-                            <h2 className="mb-2 font-mono text-lg font-bold text-zinc-200">Guardian is Watching</h2>
-                            <p className="font-mono text-sm text-zinc-600">
+                            <h2 className="mb-2 font-mono text-lg font-bold uppercase tracking-tight text-foreground">Guardian is Watching</h2>
+                            <div className="max-w-md font-mono text-[11px] text-muted-foreground uppercase opacity-70 leading-relaxed px-6">
                                 {hasFile
-                                    ? <>File loaded: <span className="text-zinc-400">{activeFileName}</span>. Click <span className="text-zinc-400">"Run CI/CD Review"</span> to enforce quality gates.</>
+                                    ? <>File loaded: <span className="text-foreground">{activeFileName}</span>. Click <span className="text-foreground">"Run CI/CD Review"</span> to enforce quality gates.</>
                                     : hasRepo
-                                        ? <>Select a file from the repo above, then click <span className="text-zinc-400">"Run CI/CD Review"</span> to audit real code.</>
-                                        : <>Scan a repository in the <span className="text-zinc-400">Librarian</span> tab first, then load a file here to run the quality gate.</>
+                                        ? <>Select a file from the repo above, then click <span className="text-foreground">"Run CI/CD Review"</span> to audit real code.</>
+                                        : <>Scan a repository in the <span className="text-foreground">Librarian</span> tab first, then load a file here to run the quality gate.</>
                                 }
-                            </p>
+                            </div>
                         </div>
-                        <div className="flex gap-8 font-mono text-xs text-zinc-700">
-                            <div className="flex items-center gap-2"><ShieldAlert className="h-3.5 w-3.5 text-rose-500/40" /> Sonar Analysis</div>
-                            <div className="flex items-center gap-2"><XCircle className="h-3.5 w-3.5 text-rose-500/40" /> Merge Enforcement</div>
-                            <div className="flex items-center gap-2"><Sparkles className="h-3.5 w-3.5 text-emerald-500/40" /> Auto-Healing</div>
+                        <div className="flex gap-8 font-mono text-[10px] text-muted-foreground opacity-50 uppercase tracking-widest">
+                            <div className="flex items-center gap-2"><ShieldAlert className="h-3.5 w-3.5 text-destructive/40" /> Sonar Analysis</div>
+                            <div className="flex items-center gap-2"><CheckCircle className="h-3.5 w-3.5 text-success/40" /> Merge Enforcement</div>
+                            <div className="flex items-center gap-2"><Sparkles className="h-3.5 w-3.5 text-primary/40" /> Auto-Healing</div>
                         </div>
                     </div>
                 )}

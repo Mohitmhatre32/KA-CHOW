@@ -14,7 +14,24 @@ import {
   GraduationCap,
   Compass,
   Loader2,
+  ChevronRight,
+  Search,
 } from "lucide-react"
+
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Separator } from "@/components/ui/separator"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable"
 
 // API Call
 import { triggerSonarScan } from "@/lib/api"
@@ -37,7 +54,8 @@ type PanelType = "chat" | "health" | null
 
 export default function DashboardPage() {
   const router = useRouter()
-  const [sidebarWidth, setSidebarWidth] = useState(240)
+  
+  // State
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [activePanel, setActivePanel] = useState<PanelType>(null)
   const [mainView, setMainView] = useState<MainView>("graph")
@@ -46,9 +64,6 @@ export default function DashboardPage() {
   const [activeRepoUrl, setActiveRepoUrl] = useState<string | null>(null)
   const [activeRepoBranch, setActiveRepoBranch] = useState<string | null>(null)
   const [isScanning, setIsScanning] = useState(false)
-
-  const isResizing = useRef(false)
-  const maxSidebarWidth = typeof window !== "undefined" ? window.innerWidth * 0.25 : 400
 
   const refreshActiveRepo = useCallback(() => {
     const repo = getActiveRepo()
@@ -66,29 +81,6 @@ export default function DashboardPage() {
     return () => window.removeEventListener("active-repo-changed", refreshActiveRepo)
   }, [refreshActiveRepo])
 
-  const handleMouseDown = useCallback(() => {
-    isResizing.current = true
-    document.body.style.cursor = "col-resize"
-    document.body.style.userSelect = "none"
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizing.current) return
-      const newWidth = Math.max(180, Math.min(e.clientX, maxSidebarWidth))
-      setSidebarWidth(newWidth)
-    }
-
-    const handleMouseUp = () => {
-      isResizing.current = false
-      document.body.style.cursor = ""
-      document.body.style.userSelect = ""
-      document.removeEventListener("mousemove", handleMouseMove)
-      document.removeEventListener("mouseup", handleMouseUp)
-    }
-
-    document.addEventListener("mousemove", handleMouseMove)
-    document.addEventListener("mouseup", handleMouseUp)
-  }, [maxSidebarWidth])
-
   const togglePanel = (panel: PanelType) => {
     setActivePanel((prev) => (prev === panel ? null : panel))
   }
@@ -102,7 +94,6 @@ export default function DashboardPage() {
     setIsScanning(true)
     try {
       await triggerSonarScan(activeRepoUrl, activeRepoBranch || "main")
-      // An alert will appear in the inbox when done. User can refresh stats to see updates.
     } catch (error) {
       console.error("Failed to trigger scan", error)
     } finally {
@@ -113,207 +104,223 @@ export default function DashboardPage() {
   return (
     <div className={`flex h-screen flex-col bg-background transition-opacity duration-700 ${mounted ? "opacity-100" : "opacity-0"}`}>
       {/* ─── TOP BAR ─── */}
-      <header className="flex h-12 shrink-0 items-center justify-between border-b border-border px-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card">
-            <GitBranch className="h-3.5 w-3.5 text-primary" />
+      <header className="flex h-12 shrink-0 items-center justify-between border-b border-border px-4 bg-card/30 backdrop-blur-sm z-20">
+        <div className="flex items-center gap-4">
+          <div 
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-background cursor-pointer hover:border-primary/50 transition-colors"
+            onClick={() => router.push("/")}
+          >
+            <GitBranch className="h-4 w-4 text-primary" />
           </div>
-          <span className="font-mono text-sm font-medium text-foreground">KA-CHOW</span>
+          <h1 className="text-sm m-0 font-semibold tracking-tight hidden md:block">KA-CHOW</h1>
+
+          <Separator orientation="vertical" className="h-6 hidden md:block" />
 
           {activeRepoName ? (
             <div className="flex items-center gap-2">
-              <span className="rounded-md border border-primary/30 bg-primary/10 px-2 py-0.5 font-mono text-[10px] text-primary">
+              <Badge variant="outline" className="font-mono text-[10px] py-0 px-2 border-primary/30 text-primary bg-primary/5">
                 {activeRepoName}
-              </span>
-              <button
+              </Badge>
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={handleTriggerScan}
                 disabled={isScanning}
-                className="flex items-center gap-1 rounded-md bg-emerald-600/20 px-2 py-0.5 text-[10px] font-medium text-emerald-500 hover:bg-emerald-600/30 transition-colors disabled:opacity-50"
+                className="h-6 px-2 text-[10px] font-bold text-success hover:bg-success/10 hover:text-success"
               >
-                {isScanning ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldAlert className="h-3 w-3" />}
+                {isScanning ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <ShieldAlert className="h-3 w-3 mr-1" />}
                 SCAN
-              </button>
+              </Button>
             </div>
           ) : (
-            <span className="rounded-md border border-border bg-secondary px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
-              demo
-            </span>
+            <Badge variant="secondary" className="font-mono text-[10px] py-0 px-2 opacity-50">
+                DEMO_CONTENT
+            </Badge>
           )}
 
-          <button
-            onClick={() => router.push("/import-repository")}
-            title="Add repository"
-            className="flex h-6 w-6 items-center justify-center rounded-md border border-dashed border-border text-muted-foreground transition-all duration-200 hover:border-primary hover:bg-primary/10 hover:text-primary"
-          >
-            <Plus className="h-3.5 w-3.5" />
-          </button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => router.push("/import-repository")}
+                  className="h-6 w-6 border-dashed opacity-50 hover:opacity-100"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Import Repository</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
 
-        <div className="flex items-center gap-1">
-          <button
+        <div className="flex items-center gap-2">
+          <Button
+            variant={activePanel === "chat" ? "default" : "ghost"}
+            size="sm"
             onClick={() => togglePanel("chat")}
-            className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-all duration-200 ${activePanel === "chat"
-              ? "bg-primary text-primary-foreground"
-              : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-              }`}
+            className="h-8 gap-2"
           >
             <MessageSquare className="h-4 w-4" />
             <span className="hidden sm:inline">AI Chat</span>
-          </button>
-          <button
+          </Button>
+          
+          <Button
+            variant={activePanel === "health" ? "secondary" : "ghost"}
+            size="sm"
             onClick={() => togglePanel("health")}
-            className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-all duration-200 ${activePanel === "health"
-              ? "bg-emerald-600 text-white"
-              : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-              }`}
+            className={`h-8 gap-2 ${activePanel === "health" ? "text-success bg-success/10" : ""}`}
           >
             <Activity className="h-4 w-4" />
             <span className="hidden sm:inline">Health</span>
-          </button>
+          </Button>
+          
           <AlertsInbox />
         </div>
       </header>
 
-      {/* ─── MAIN LAYOUT ─── */}
-      <div className="flex flex-1 overflow-hidden">
-
-        {/* Sidebar */}
-        <div
-          className="flex shrink-0 flex-col border-r border-border bg-card transition-all duration-300 overflow-hidden"
-          style={{ width: sidebarCollapsed ? 0 : sidebarWidth }}
+      {/* ─── MAIN CONTENT GROUP ─── */}
+      <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
+        {/* Sidebar Panel */}
+        <ResizablePanel 
+          defaultSize={20} 
+          minSize={15} 
+          maxSize={30}
+          collapsible={true}
+          onCollapse={() => setSidebarCollapsed(true)}
+          onExpand={() => setSidebarCollapsed(false)}
+          className={`flex flex-col bg-sidebar border-r border-border transition-all duration-300 ${sidebarCollapsed ? "max-w-[0px]" : ""}`}
         >
-          {!sidebarCollapsed && (
-            <>
-              {/* Sidebar Header */}
-              <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">
-                <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Explorer
-                </span>
-                <button
-                  onClick={() => setSidebarCollapsed(true)}
-                  className="rounded p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-                >
-                  <PanelLeftClose className="h-3.5 w-3.5" />
-                </button>
-              </div>
-
-              {/* Sidebar Content (Repo Switcher) */}
-              <div className="flex-1 overflow-hidden">
-                <RepoSwitcher />
-              </div>
-
-              {/* ─── BOTTOM AGENT STACK ─── */}
-              <div className="shrink-0 border-t border-border p-2 space-y-1 bg-muted/20">
-                {/* Guardian Tab */}
-                <button
-                  onClick={() => toggleMainView("guardian")}
-                  className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 transition-all duration-200 ${mainView === "guardian"
-                    ? "border border-rose-500/30 bg-rose-500/10 text-rose-300"
-                    : "border border-transparent text-muted-foreground hover:bg-secondary hover:text-foreground"
-                    }`}
-                >
-                  <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border ${mainView === "guardian" ? "border-rose-500/40 bg-rose-500/15" : "border-border bg-card/50"}`}>
-                    <ShieldAlert className={`h-3.5 w-3.5 ${mainView === "guardian" ? "text-rose-400" : "text-muted-foreground"}`} />
-                  </div>
-                  <div className="min-w-0 flex-1 text-left">
-                    <p className="truncate text-xs font-semibold">The Guardian</p>
-                    <p className="truncate font-mono text-[10px] text-muted-foreground/60">CI/CD Enforcer</p>
-                  </div>
-                </button>
-
-                {/* Architect Tab */}
-                <button
-                  onClick={() => toggleMainView("architect")}
-                  className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 transition-all duration-200 ${mainView === "architect"
-                    ? "border border-cyan-500/30 bg-cyan-500/10 text-cyan-300"
-                    : "border border-transparent text-muted-foreground hover:bg-secondary hover:text-foreground"
-                    }`}
-                >
-                  <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border ${mainView === "architect" ? "border-cyan-500/40 bg-cyan-500/15" : "border-border bg-card/50"}`}>
-                    <Compass className={`h-3.5 w-3.5 ${mainView === "architect" ? "text-cyan-400" : "text-muted-foreground"}`} />
-                  </div>
-                  <div className="min-w-0 flex-1 text-left">
-                    <p className="truncate text-xs font-semibold">The Architect</p>
-                    <p className="truncate font-mono text-[10px] text-muted-foreground/60">Design & Impact</p>
-                  </div>
-                </button>
-
-                {/* Mentor Tab */}
-                <button
-                  onClick={() => toggleMainView("mentor")}
-                  className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 transition-all duration-200 ${mainView === "mentor"
-                    ? "border border-indigo-500/30 bg-indigo-500/10 text-indigo-300"
-                    : "border border-transparent text-muted-foreground hover:bg-secondary hover:text-foreground"
-                    }`}
-                >
-                  <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border ${mainView === "mentor" ? "border-indigo-500/40 bg-indigo-500/15" : "border-border bg-card/50"}`}>
-                    <GraduationCap className={`h-3.5 w-3.5 ${mainView === "mentor" ? "text-indigo-400" : "text-muted-foreground"}`} />
-                  </div>
-                  <div className="min-w-0 flex-1 text-left">
-                    <p className="truncate text-xs font-semibold">The Mentor</p>
-                    <p className="truncate font-mono text-[10px] text-muted-foreground/60">Onboarding AI</p>
-                  </div>
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Sidebar Resize Handle */}
-        {!sidebarCollapsed && (
-          <div
-            className="group flex w-1 cursor-col-resize items-center justify-center hover:bg-primary/20"
-            onMouseDown={handleMouseDown}
-          >
-            <GripVertical className="h-4 w-4 text-muted-foreground/30 opacity-0 transition-opacity group-hover:opacity-100" />
+          {/* Sidebar Header */}
+          <div className="flex shrink-0 items-center justify-between border-b border-border px-4 h-10">
+            <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground m-0">
+              Explorer
+            </h2>
           </div>
-        )}
 
-        {/* Collapsed Sidebar Toggle */}
-        {sidebarCollapsed && (
-          <div className="flex shrink-0 flex-col items-center border-r border-border bg-card py-2 w-10">
-            <button
-              onClick={() => setSidebarCollapsed(false)}
-              className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-            >
-              <PanelLeftOpen className="h-4 w-4" />
-            </button>
+          {/* Sidebar Content (Repo Switcher) */}
+          <div className="flex-1 overflow-hidden">
+            <RepoSwitcher />
           </div>
-        )}
+
+          {/* ─── BOTTOM AGENT STACK ─── */}
+          <div className="shrink-0 border-t border-border p-2 space-y-1 bg-muted/10">
+            <AgentTab 
+              active={mainView === "guardian"} 
+              onClick={() => toggleMainView("guardian")}
+              icon={ShieldAlert}
+              title="The Guardian"
+              subtitle="CI/CD Enforcer"
+              variant="destructive"
+            />
+            <AgentTab 
+              active={mainView === "architect"} 
+              onClick={() => toggleMainView("architect")}
+              icon={Compass}
+              title="The Architect"
+              subtitle="Design & Impact"
+              variant="primary"
+            />
+            <AgentTab 
+              active={mainView === "mentor"} 
+              onClick={() => toggleMainView("mentor")}
+              icon={GraduationCap}
+              title="The Mentor"
+              subtitle="Onboarding AI"
+              variant="accent"
+            />
+          </div>
+        </ResizablePanel>
+
+        <ResizableHandle withHandle className="bg-border opacity-50 hover:opacity-100 transition-opacity" />
 
         {/* ─── MAIN CANVAS AREA ─── */}
-        <div className="flex-1 overflow-hidden">
-          {mainView === "guardian" ? (
-            <div className="animate-in fade-in slide-in-from-bottom-2 h-full duration-300">
-              <GuardianView />
-            </div>
-          ) : mainView === "mentor" ? (
-            <div className="animate-in fade-in slide-in-from-bottom-2 h-full duration-300">
-              <MentorView />
-            </div>
-          ) : mainView === "architect" ? (
-            <div className="animate-in fade-in slide-in-from-bottom-2 h-full duration-300">
-              <ArchitectView />
-            </div>
-          ) : (
-            <GraphView />
-          )}
-        </div>
+        <ResizablePanel defaultSize={80} className="flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-hidden relative">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(88,166,255,0.03),transparent_70%)] pointer-events-none" />
+            {mainView === "guardian" ? (
+              <div className="animate-in fade-in slide-in-from-bottom-2 h-full duration-300">
+                <GuardianView />
+              </div>
+            ) : mainView === "mentor" ? (
+              <div className="animate-in fade-in slide-in-from-bottom-2 h-full duration-300">
+                <MentorView />
+              </div>
+            ) : mainView === "architect" ? (
+              <div className="animate-in fade-in slide-in-from-bottom-2 h-full duration-300">
+                <ArchitectView />
+              </div>
+            ) : (
+              <GraphView />
+            )}
+          </div>
+        </ResizablePanel>
 
         {/* ─── RIGHT SIDE PANELS ─── */}
         {activePanel && (
-          <div
-            className="shrink-0 border-l border-border animate-in slide-in-from-right-4 duration-300"
-            style={{ width: "min(400px, 40vw)" }}
-          >
-            {activePanel === "chat" ? (
-              <ChatPanel onClose={() => setActivePanel(null)} />
-            ) : (
-              <HealthPanel onClose={() => setActivePanel(null)} />
-            )}
-          </div>
+          <>
+            <ResizableHandle withHandle className="bg-border" />
+            <ResizablePanel 
+              defaultSize={25} 
+              minSize={20} 
+              maxSize={40}
+              className="bg-card border-l border-border animate-in slide-in-from-right-4 duration-500"
+            >
+              {activePanel === "chat" ? (
+                <ChatPanel onClose={() => setActivePanel(null)} />
+              ) : (
+                <HealthPanel onClose={() => setActivePanel(null)} />
+              )}
+            </ResizablePanel>
+          </>
         )}
-      </div>
+      </ResizablePanelGroup>
     </div>
   )
 }
+
+function AgentTab({ 
+  active, 
+  onClick, 
+  icon: Icon, 
+  title, 
+  subtitle, 
+  variant = "primary" 
+}: { 
+  active: boolean, 
+  onClick: () => void, 
+  icon: any, 
+  title: string, 
+  subtitle: string,
+  variant?: "primary" | "destructive" | "accent"
+}) {
+  const variantStyles = {
+    primary: active ? "border-primary/30 bg-primary/10 text-primary" : "text-muted-foreground",
+    destructive: active ? "border-destructive/30 bg-destructive/10 text-destructive" : "text-muted-foreground",
+    accent: active ? "border-accent/30 bg-accent/10 text-accent" : "text-muted-foreground",
+  }
+
+  const iconStyles = {
+    primary: active ? "border-primary/40 bg-primary/15 text-primary" : "border-border bg-card/50",
+    destructive: active ? "border-destructive/40 bg-destructive/15 text-destructive" : "border-border bg-card/50",
+    accent: active ? "border-accent/40 bg-accent/15 text-accent-foreground" : "border-border bg-card/50",
+  }
+
+  return (
+    <button
+      onClick={onClick}
+      className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 transition-all duration-200 border border-transparent hover:bg-secondary/50 ${variantStyles[variant]}`}
+    >
+      <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition-colors ${iconStyles[variant]}`}>
+        <Icon className="h-3.5 w-3.5" />
+      </div>
+      <div className="min-w-0 flex-1 text-left">
+        <p className={`truncate text-[11px] font-bold ${active ? "" : "text-foreground"}`}>{title}</p>
+        <p className="truncate font-mono text-[9px] opacity-60 uppercase tracking-tighter">{subtitle}</p>
+      </div>
+    </button>
+  )
+}

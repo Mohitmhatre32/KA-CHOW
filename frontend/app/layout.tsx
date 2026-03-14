@@ -1,12 +1,7 @@
 import type { Metadata, Viewport } from 'next'
-import { Inter, JetBrains_Mono } from 'next/font/google'
+import { JetBrains_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
-
-const _inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-inter',
-})
 
 const _jetbrainsMono = JetBrains_Mono({
   subsets: ['latin'],
@@ -29,7 +24,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body className={`${_inter.variable} ${_jetbrainsMono.variable} font-sans antialiased`}>
+      <body className={`${_jetbrainsMono.variable} antialiased`}>
         {children}
         <Analytics />
       </body>

@@ -10,33 +10,35 @@ function FileTreeItem({ node, depth = 0 }: { node: FileNode; depth?: number }) {
   if (node.type === "file") {
     return (
       <button
-        className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+        className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-muted/30 group"
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
       >
-        <File className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
-        <span className="truncate font-mono text-xs">{node.name}</span>
+        <File className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <span className="truncate font-mono text-[11px] font-medium text-muted-foreground group-hover:text-foreground">{node.name}</span>
       </button>
     )
   }
 
   return (
-    <div>
+    <div className="select-none">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-sm text-foreground transition-colors hover:bg-secondary"
+        className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left transition-colors hover:bg-muted/30 group"
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
       >
         <ChevronRight
-          className={`h-3 w-3 shrink-0 text-muted-foreground transition-transform duration-200 ${
+          className={`h-3 w-3 shrink-0 text-muted-foreground/50 transition-transform duration-200 group-hover:text-muted-foreground ${
             isOpen ? "rotate-90" : ""
           }`}
         />
         {isOpen ? (
-          <FolderOpen className="h-3.5 w-3.5 shrink-0 text-primary" />
+          <FolderOpen className="h-3.5 w-3.5 shrink-0 text-primary/80" />
         ) : (
-          <Folder className="h-3.5 w-3.5 shrink-0 text-primary" />
+          <Folder className="h-3.5 w-3.5 shrink-0 text-primary/80" />
         )}
-        <span className="truncate font-mono text-xs font-medium">{node.name}</span>
+        <span className="truncate font-mono text-[11px] font-bold text-foreground/90 group-hover:text-foreground">
+          {node.name}
+        </span>
       </button>
       {isOpen && node.children && (
         <div className="animate-in slide-in-from-top-1 duration-200">

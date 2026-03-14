@@ -2,9 +2,13 @@
 
 import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { GitBranch, ArrowLeft, Loader2, Check, Github, AlertCircle, Book, Lock, Unlock } from "lucide-react"
+import { GitBranch, ArrowLeft, Loader2, Check, Github, AlertCircle, Lock, Unlock, Search } from "lucide-react"
 import { analyzeRepository, getGithubClientId, getUserRepos, GithubRepo } from "@/lib/api"
 import { upsertRepo, setActiveRepoId, getAllRepos } from "@/lib/repo-store"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 
 const ANALYSIS_STEPS = [
   "Cloning repository...",
@@ -142,26 +146,29 @@ export default function ImportRepositoryPage() {
 
   return (
     <main className="relative flex min-h-screen flex-col items-center justify-center bg-background px-6 py-12">
-      <button
+      <Button
+        variant="ghost"
+        size="sm"
         onClick={() => router.push(getAllRepos().length > 0 ? "/dashboard" : "/")}
-        className="absolute left-6 top-6 flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        className="absolute left-6 top-6 gap-2 text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />
         Back
-      </button>
+      </Button>
 
       <div className={`w-full max-w-2xl transition-all duration-700 ${mounted ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"}`}>
-        <div className="rounded-xl border border-border bg-card p-8">
-
-          <div className="mb-8 flex flex-col items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-border bg-background">
+        <Card className="border-border bg-card">
+          <CardHeader className="flex flex-col items-center text-center pb-8">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-border bg-background mb-4">
               <GitBranch className="h-6 w-6 text-primary" />
             </div>
-            <h1 className="text-2xl font-semibold text-foreground">Import Your Repository</h1>
-            <p className="text-center text-sm text-muted-foreground">
+            <CardTitle className="text-2xl italic">Import Your Repository</CardTitle>
+            <CardDescription>
               {githubToken ? "Select a repository to analyze codebase architecture" : "Connect with GitHub to seamlessly import your repositories"}
-            </p>
-          </div>
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent>
 
           {error && (
             <div className="mb-6 flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
@@ -172,49 +179,49 @@ export default function ImportRepositoryPage() {
 
           {!githubToken ? (
             // Not Authenticated View
-            <div className="flex flex-col items-center justify-center py-6 gap-6">
-              <button
+            <div className="flex flex-col items-center justify-center py-6 gap-8">
+              <Button
                 onClick={handleConnectGithub}
                 disabled={!clientId}
-                className="flex w-full sm:w-auto items-center justify-center gap-3 rounded-lg bg-foreground text-background py-3 px-8 text-sm font-medium transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full sm:w-auto h-12 px-8 bg-foreground text-background hover:bg-foreground/90 font-semibold"
               >
-                <Github className="h-5 w-5" />
+                <Github className="mr-2 h-5 w-5" />
                 Connect with GitHub
-              </button>
+              </Button>
 
-              <div className="flex w-full items-center gap-4 text-sm text-muted-foreground before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border">
+              <div className="flex w-full items-center gap-4 text-xs text-muted-foreground/60 uppercase tracking-widest before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border">
                 or use public URL
               </div>
 
               <form onSubmit={handleSubmit} className="w-full flex gap-3 flex-col sm:flex-row">
-                <input
+                <Input
                   type="url"
                   placeholder="https://github.com/user/repo"
                   value={selectedRepoUrl}
                   onChange={(e) => setSelectedRepoUrl(e.target.value)}
-                  className="flex-1 rounded-lg border border-border bg-input py-3 px-4 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="h-12"
                   disabled={isLoading}
                 />
-                <button
+                <Button
                   type="submit"
                   disabled={isLoading || !selectedRepoUrl}
-                  className="rounded-lg bg-primary py-3 px-6 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90 disabled:opacity-50"
+                  className="h-12 px-8"
                 >
                   {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Import"}
-                </button>
+                </Button>
               </form>
             </div>
           ) : (
             // Authenticated View
             <div className="space-y-6">
               <div className="flex items-center justify-between border-b border-border pb-4">
-                <div className="flex items-center gap-2 text-sm text-foreground font-medium">
-                  <Github className="h-4 w-4" />
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Github className="h-4 w-4 text-primary" />
                   Connected to GitHub
                 </div>
-                <button onClick={handleDisconnect} className="text-xs text-muted-foreground hover:text-destructive transition-colors">
+                <Button variant="ghost" size="sm" onClick={handleDisconnect} className="text-xs text-muted-foreground hover:text-destructive">
                   Disconnect
-                </button>
+                </Button>
               </div>
 
               {isFetchingRepos ? (
@@ -225,18 +232,19 @@ export default function ImportRepositoryPage() {
               ) : (
                 <>
                   <div className="relative">
-                    <input
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/50" />
+                    <Input
                       type="text"
                       placeholder="Search repositories..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full rounded-lg border border-border bg-input py-2.5 px-4 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                      className="pl-10"
                     />
                   </div>
 
-                  <div className="max-h-64 overflow-y-auto rounded-lg border border-border p-1 space-y-1">
+                  <div className="max-h-64 overflow-y-auto rounded-lg border border-border bg-muted/20 p-1 space-y-1">
                     {filteredRepos.length === 0 ? (
-                      <div className="py-8 text-center text-sm text-muted-foreground">
+                      <div className="py-8 text-center text-sm text-muted-foreground italic">
                         No repositories found.
                       </div>
                     ) : (
@@ -244,15 +252,15 @@ export default function ImportRepositoryPage() {
                         <button
                           key={repo.id}
                           onClick={() => setSelectedRepoUrl(repo.clone_url)}
-                          className={`w-full flex items-center justify-between p-3 rounded-md transition-colors text-left ${selectedRepoUrl === repo.clone_url ? 'bg-primary/10 border-primary border' : 'hover:bg-secondary border border-transparent'}`}
+                          className={`w-full flex items-center justify-between p-3 rounded-lg transition-all text-left border ${selectedRepoUrl === repo.clone_url ? 'bg-primary/5 border-primary/50' : 'hover:bg-accent border-transparent'}`}
                           disabled={isLoading}
                         >
                           <div className="flex items-center gap-3">
-                            <div className={`p-1.5 rounded-md ${repo.private ? "bg-amber-500/10 text-amber-500" : "bg-emerald-500/10 text-emerald-500"}`}>
+                            <div className={`p-2 rounded-md ${repo.private ? "bg-warning/10 text-warning" : "bg-success/10 text-success"}`}>
                               {repo.private ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
                             </div>
                             <div>
-                              <p className="text-sm font-medium text-foreground">{repo.full_name}</p>
+                              <p className="text-sm font-semibold text-foreground leading-none mb-1">{repo.full_name}</p>
                               {repo.description && <p className="text-xs text-muted-foreground truncate max-w-xs">{repo.description}</p>}
                             </div>
                           </div>
@@ -263,29 +271,29 @@ export default function ImportRepositoryPage() {
                   </div>
 
                   <div className="flex gap-4">
-                    <input
+                    <Input
                       type="text"
                       value={branch}
                       onChange={(e) => setBranch(e.target.value)}
                       placeholder="branch (e.g. main)"
                       disabled={isLoading}
-                      className="w-1/3 rounded-lg border border-border bg-input py-3 px-4 text-sm focus:border-primary focus:outline-none"
+                      className="w-1/3"
                     />
 
-                    <button
+                    <Button
                       onClick={() => handleSubmit()}
                       disabled={isLoading || !selectedRepoUrl}
-                      className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-primary py-3 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90 disabled:opacity-50"
+                      className="flex-1 h-12"
                     >
                       {isLoading ? (
                         <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                           Processing...
                         </>
                       ) : (
                         "Import Selected Repository"
                       )}
-                    </button>
+                    </Button>
                   </div>
                 </>
               )}
@@ -297,26 +305,27 @@ export default function ImportRepositoryPage() {
               {ANALYSIS_STEPS.map((step, i) => (
                 <div
                   key={step}
-                  className={`flex items-center gap-3 text-sm transition-all duration-500 ${i <= currentStep ? "opacity-100" : "opacity-0 translate-y-2"}`}
+                  className={`flex items-center gap-3 text-xs tracking-wide uppercase font-mono transition-all duration-500 ${i <= currentStep ? "opacity-100" : "opacity-0 translate-y-2"}`}
                 >
                   {i < currentStep ? (
-                    <Check className="h-4 w-4 text-emerald-500" />
+                    <Check className="h-4 w-4 text-success" />
                   ) : i === currentStep ? (
                     <Loader2 className="h-4 w-4 animate-spin text-primary" />
                   ) : (
                     <div className="h-4 w-4" />
                   )}
-                  <span className={i < currentStep ? "text-muted-foreground line-through" : i === currentStep ? "text-foreground font-medium" : "text-muted-foreground/50"}>
+                  <span className={i < currentStep ? "text-muted-foreground line-through opacity-50" : i === currentStep ? "text-primary font-bold" : "text-muted-foreground/30"}>
                     {step}
                   </span>
                 </div>
               ))}
             </div>
           )}
+          </CardContent>
+        </Card>
+        <div className="mt-6 text-center">
+            <small>OAuth authentication enables seamless imports of both public and private repositories.</small>
         </div>
-        <p className="mt-4 text-center text-xs text-muted-foreground/60">
-          OAuth authentication enables seamless imports of both public and private repositories.
-        </p>
       </div>
     </main>
   )

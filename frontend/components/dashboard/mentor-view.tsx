@@ -12,16 +12,30 @@ import {
     type TimelineEvent,
 } from "@/lib/api"
 import { getActiveRepo } from "@/lib/repo-store"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Separator } from "@/components/ui/separator"
+import {
+    Brain,
+    MessageSquare,
+    CheckCircle2,
+    ShieldCheck,
+    Sword,
+    ScrollText,
+    Send,
+    Loader2,
+    Terminal,
+} from "lucide-react"
 
 // ─── Commit Type Config ───────────────────────────────────────────────────────
 const COMMIT_TYPE: Record<string, { color: string; bg: string; label: string }> = {
-    feat: { color: "#a78bfa", bg: "rgba(167,139,250,0.15)", label: "feat" },
-    fix: { color: "#f87171", bg: "rgba(248,113,113,0.15)", label: "fix" },
-    chore: { color: "#94a3b8", bg: "rgba(148,163,184,0.12)", label: "chore" },
-    docs: { color: "#38bdf8", bg: "rgba(56,189,248,0.15)", label: "docs" },
-    refactor: { color: "#fb923c", bg: "rgba(251,146,60,0.15)", label: "refactor" },
-    test: { color: "#4ade80", bg: "rgba(74,222,128,0.15)", label: "test" },
-    other: { color: "#e2e8f0", bg: "rgba(226,232,240,0.10)", label: "other" },
+    feat: { color: "var(--primary)", bg: "rgba(var(--primary),0.15)", label: "feat" },
+    fix: { color: "var(--destructive)", bg: "rgba(var(--destructive),0.15)", label: "fix" },
+    chore: { color: "var(--muted-foreground)", bg: "rgba(var(--muted-foreground),0.12)", label: "chore" },
+    docs: { color: "var(--primary)", bg: "rgba(var(--primary),0.15)", label: "docs" },
+    refactor: { color: "var(--warning)", bg: "rgba(var(--warning),0.15)", label: "refactor" },
+    test: { color: "var(--success)", bg: "rgba(var(--success),0.15)", label: "test" },
+    other: { color: "var(--muted-foreground)", bg: "rgba(var(--muted-foreground),0.10)", label: "other" },
 }
 
 const ROLES = ["Backend", "Frontend", "SRE"]
@@ -32,20 +46,13 @@ function SonarBadge({ stats }: { stats: Record<string, unknown> }) {
     const gate = (stats.quality_gate as string) || "N/A"
     const isOk = gate === "OK" || gate === "PASSED"
     return (
-        <span
-            style={{
-                fontSize: 10,
-                fontWeight: 700,
-                padding: "2px 8px",
-                borderRadius: 99,
-                background: isOk ? "rgba(74,222,128,0.15)" : "rgba(248,113,113,0.18)",
-                color: isOk ? "#4ade80" : "#f87171",
-                border: `1px solid ${isOk ? "#4ade804d" : "#f871714d"}`,
-                letterSpacing: "0.04em",
-            }}
+        <Badge
+            variant="outline"
+            className={`h-5 gap-1.5 px-2 font-mono text-[9px] font-bold uppercase tracking-wider ${isOk ? "border-success/40 bg-success/10 text-success" : "border-destructive/40 bg-destructive/10 text-destructive"}`}
         >
-            ⬤ {isOk ? "SONAR OK" : `SONAR ${gate}`}
-        </span>
+            <div className={`h-1.5 w-1.5 rounded-full ${isOk ? "bg-success" : "bg-destructive"}`} />
+            {isOk ? "SONAR OK" : `SONAR ${gate}`}
+        </Badge>
     )
 }
 
@@ -55,17 +62,7 @@ function formatContent(content: string) {
         if (part.startsWith("```")) {
             const codeContent = part.replace(/```\w*\n?/, "").replace(/```$/, "")
             return (
-                <pre key={i} style={{
-                    margin: "12px 0",
-                    overflowX: "auto",
-                    borderRadius: 8,
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    background: "rgba(0,0,0,0.3)",
-                    padding: 14,
-                    fontSize: 12,
-                    fontFamily: "var(--font-mono, monospace)",
-                    lineHeight: 1.5,
-                }}>
+                <pre key={i} className="my-3 overflow-x-auto rounded-lg border border-border bg-black/40 p-3.5 font-mono text-xs leading-relaxed text-muted-foreground shadow-sm">
                     <code>{codeContent}</code>
                 </pre>
             )
@@ -76,28 +73,28 @@ function formatContent(content: string) {
         return (
             <div key={i}>
                 {lines.map((line, li) => {
-                    if (!line.trim() && li > 0) return <div key={li} style={{ height: 8 }} />
+                    if (!line.trim() && li > 0) return <div key={li} className="h-2" />
 
                     let contentNode: React.ReactNode = line
 
                     // Handle Headers
                     if (line.trim().startsWith("### ")) {
-                        contentNode = <h3 style={{ margin: "14px 0 6px", fontSize: 15, fontWeight: 800, color: "#fff" }}>{line.trim().slice(4)}</h3>
+                        contentNode = <h3 className="mb-1 mt-3 font-mono text-[13px] font-bold text-foreground">{line.trim().slice(4)}</h3>
                     } else if (line.trim().startsWith("## ")) {
-                        contentNode = <h2 style={{ margin: "16px 0 8px", fontSize: 17, fontWeight: 800, color: "#fff" }}>{line.trim().slice(3)}</h2>
+                        contentNode = <h2 className="mb-2 mt-4 font-mono text-sm font-bold text-foreground uppercase tracking-tight">{line.trim().slice(3)}</h2>
                     } else if (line.trim().startsWith("# ")) {
-                        contentNode = <h1 style={{ margin: "18px 0 10px", fontSize: 19, fontWeight: 800, color: "#fff" }}>{line.trim().slice(2)}</h1>
+                        contentNode = <h1 className="mb-2 mt-5 font-mono text-base font-black text-foreground uppercase tracking-widest border-b border-border pb-1">{line.trim().slice(2)}</h1>
                     } else if (line.trim().startsWith("- ")) {
                         // Simple bullet
                         const bulletText = line.trim().slice(2)
                         contentNode = (
-                            <div style={{ display: "flex", gap: 8, marginLeft: 4, marginBottom: 4 }}>
-                                <span style={{ color: "#6366f1", fontWeight: 900 }}>•</span>
+                            <div className="mb-1 ml-1 flex gap-2 font-mono text-xs leading-relaxed text-muted-foreground">
+                                <span className="font-bold text-primary">•</span>
                                 <span>{parseInline(bulletText)}</span>
                             </div>
                         )
                     } else {
-                        contentNode = parseInline(line)
+                        contentNode = <p className="leading-relaxed">{parseInline(line)}</p>
                     }
 
                     return <div key={li}>{contentNode}</div>
@@ -111,17 +108,10 @@ function parseInline(text: string) {
     const segments = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g)
     return segments.map((seg, j) => {
         if (seg.startsWith("**") && seg.endsWith("**")) {
-            return <strong key={j} style={{ fontWeight: 700, color: "#fff" }}>{seg.slice(2, -2)}</strong>
+            return <strong key={j} className="font-bold text-foreground">{seg.slice(2, -2)}</strong>
         }
         if (seg.startsWith("`") && seg.endsWith("`")) {
-            return <code key={j} style={{
-                borderRadius: 4,
-                background: "rgba(255,255,255,0.12)",
-                padding: "2px 5px",
-                fontFamily: "var(--font-mono, monospace)",
-                fontSize: 12,
-                color: "#a78bfa"
-            }}>{seg.slice(1, -1)}</code>
+            return <code key={j} className="rounded bg-muted/40 px-1 py-0.5 font-mono text-[11px] font-medium text-primary border border-border/50">{seg.slice(1, -1)}</code>
         }
         return seg
     })
@@ -131,41 +121,29 @@ function ChatMessage({ role, content }: { role: "user" | "ai"; content: string }
     const isUser = role === "user"
     return (
         <div
-            style={{
-                display: "flex",
-                justifyContent: isUser ? "flex-end" : "flex-start",
-                marginBottom: 12,
-            }}
+            className={`flex w-full ${isUser ? "justify-end" : "justify-start"} mb-4`}
         >
             {!isUser && (
                 <div
-                    style={{
-                        width: 28, height: 28, borderRadius: "50%",
-                        background: "linear-gradient(135deg,#6366f1,#a78bfa)",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: 12, marginRight: 8, flexShrink: 0, marginTop: 2,
-                    }}
+                    className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-primary/30 bg-primary/10 text-sm shadow-[0_0_15px_rgba(var(--primary),0.1)]"
                 >
-                    🤖
+                    <Brain className="h-4 w-4 text-primary" />
                 </div>
             )}
             <div
-                style={{
-                    maxWidth: "82%",
-                    padding: "10px 14px",
-                    borderRadius: isUser ? "14px 14px 4px 14px" : "4px 14px 14px 14px",
-                    background: isUser
-                        ? "linear-gradient(135deg,#4f46e5,#7c3aed)"
-                        : "rgba(255,255,255,0.06)",
-                    border: isUser ? "none" : "1px solid rgba(255,255,255,0.08)",
-                    color: "#e2e8f0",
-                    fontSize: 13,
-                    lineHeight: 1.6,
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
-                }}
+                className={`group relative max-w-[85%] rounded-2xl px-4 py-3 transition-all duration-300 ${isUser
+                        ? "ml-4 bg-primary text-primary-foreground shadow-lg"
+                        : "mr-4 border border-border bg-muted/30 text-foreground backdrop-blur-sm"
+                    }`}
             >
-                {formatContent(content)}
+                <div className="font-mono text-xs leading-relaxed">
+                    {formatContent(content)}
+                </div>
+                {isUser && (
+                    <div className="invisible absolute -left-12 top-1/2 flex -translate-y-1/2 items-center gap-1 group-hover:visible">
+                        <Badge variant="outline" className="h-5 bg-background/50 font-mono text-[8px] text-muted-foreground opacity-60">SENT</Badge>
+                    </div>
+                )}
             </div>
         </div>
     )
@@ -269,108 +247,78 @@ export function MentorView() {
     }
 
     // ── Render ─────────────────────────────────────────────────────────────────
+    // ── Render ─────────────────────────────────────────────────────────────────
     return (
-        <div
-            className="overflow-y-auto"
-            style={{
-                height: "100%",
-                background: "transparent",
-                fontFamily: "'Inter','Segoe UI',system-ui,sans-serif",
-                color: "#e2e8f0",
-                padding: "24px",
-                boxSizing: "border-box",
-            }}
-        >
+        <div className="h-full overflow-y-auto bg-background/50 p-6 scrollbar-hide">
             {/* ── Header ── */}
-            <div style={{ marginBottom: 24 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div className="mb-8">
+                <div className="flex items-center gap-4">
                     <div
-                        style={{
-                            width: 40, height: 40, borderRadius: 12,
-                            background: "linear-gradient(135deg,#6366f1,#a78bfa)",
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            fontSize: 20, boxShadow: "0 0 20px rgba(99,102,241,0.4)",
-                        }}
+                        className="flex h-12 w-12 items-center justify-center rounded-2xl border border-primary/30 bg-primary/10 shadow-[0_0_25px_rgba(var(--primary),0.15)]"
                     >
-                        🧠
+                        <Brain className="h-6 w-6 text-primary" />
                     </div>
                     <div>
-                        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em" }}>
+                        <h1 className="font-mono text-2xl font-black uppercase tracking-tight text-foreground">
                             KA-CHOW{" "}
-                            <span style={{ background: "linear-gradient(90deg,#6366f1,#a78bfa)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+                            <span className="text-primary italic">
                                 Mentor
                             </span>
                         </h1>
-                        <p style={{ margin: 0, fontSize: 12, color: "#64748b" }}>
+                        <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground opacity-60">
                             AI-Powered Developer Onboarding &amp; Code Intelligence
                         </p>
                     </div>
 
                     {/* Role selector in header */}
-                    <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                    <div className="ml-auto flex gap-1.5">
                         {ROLES.map((r) => (
-                            <button
+                            <Button
                                 key={r}
                                 onClick={() => setRole(r)}
-                                style={{
-                                    padding: "6px 14px", borderRadius: 99, fontSize: 12, fontWeight: 600,
-                                    cursor: "pointer", transition: "all 0.2s",
-                                    background: role === r ? "linear-gradient(135deg,#6366f1,#7c3aed)" : "rgba(255,255,255,0.05)",
-                                    border: role === r ? "1px solid #6366f1" : "1px solid rgba(255,255,255,0.08)",
-                                    color: role === r ? "#fff" : "#94a3b8",
-                                    boxShadow: role === r ? "0 0 14px rgba(99,102,241,0.35)" : "none",
-                                }}
+                                variant={role === r ? "default" : "outline"}
+                                size="sm"
+                                className={`h-8 font-mono text-[10px] font-bold uppercase tracking-widest transition-all duration-300 ${role === r ? "bg-primary text-primary-foreground shadow-[0_0_15px_rgba(var(--primary),0.3)]" : "border-border text-muted-foreground opacity-70 hover:opacity-100"}`}
                             >
                                 {r}
-                            </button>
+                            </Button>
                         ))}
                     </div>
                 </div>
             </div>
 
             {/* ── Main Grid (Chat | Quest + Onboarding) ── */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: 20, marginBottom: 20 }}>
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr,380px]">
 
                 {/* ── LEFT: Chat ── */}
-                <div style={{ ...glass, ...neonBorder, display: "flex", flexDirection: "column", height: 560 }}>
+                <div className="flex h-[600px] flex-col overflow-hidden rounded-2xl border border-border bg-card/30 backdrop-blur-md shadow-2xl">
                     {/* Chat header */}
                     <div
-                        style={{
-                            padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.06)",
-                            display: "flex", alignItems: "center", gap: 10,
-                        }}
+                        className="flex items-center gap-3 border-b border-border bg-muted/20 px-5 py-4"
                     >
                         <div
-                            style={{
-                                width: 8, height: 8, borderRadius: "50%",
-                                background: "#4ade80",
-                                boxShadow: "0 0 8px #4ade80",
-                                animation: "pulse 2s infinite",
-                            }}
+                            className="h-2 w-2 animate-pulse rounded-full bg-success shadow-[0_0_10px_rgba(var(--success),0.8)]"
                         />
-                        <span style={{ fontWeight: 700, fontSize: 14 }}>Mentor AI</span>
-                        <span style={{ fontSize: 12, color: "#64748b" }}>· {role} Mode</span>
-                        <div style={{ marginLeft: "auto" }}>
+                        <span className="font-mono text-xs font-black uppercase tracking-widest text-foreground">Mentor AI</span>
+                        <Badge variant="outline" className="font-mono text-[9px] text-muted-foreground opacity-50">{role} Mode</Badge>
+                        <div className="ml-auto">
                             <SonarBadge stats={sonarStats} />
                         </div>
                     </div>
 
                     {/* Messages */}
-                    <div style={{ flex: 1, overflowY: "auto", padding: "16px 18px" }}>
+                    <div className="flex-1 overflow-y-auto p-6 space-y-2">
                         {messages.map((m, i) => (
                             <ChatMessage key={i} role={m.role} content={m.content} />
                         ))}
                         {isChatLoading && (
-                            <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#64748b", fontSize: 13 }}>
-                                <div style={{ display: "flex", gap: 4 }}>
+                            <div className="flex items-center gap-3 font-mono text-[11px] text-muted-foreground opacity-60">
+                                <div className="flex gap-1">
                                     {[0, 1, 2].map((i) => (
                                         <div
                                             key={i}
-                                            style={{
-                                                width: 6, height: 6, borderRadius: "50%",
-                                                background: "#6366f1",
-                                                animation: `bounce 1.2s ${i * 0.2}s infinite`,
-                                            }}
+                                            className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary"
+                                            style={{ animationDelay: `${i * 0.2}s` }}
                                         />
                                     ))}
                                 </div>
@@ -382,159 +330,133 @@ export function MentorView() {
 
                     {/* Input */}
                     <div
-                        style={{
-                            padding: "12px 16px", borderTop: "1px solid rgba(255,255,255,0.06)",
-                            display: "flex", gap: 10,
-                        }}
+                        className="flex items-center gap-3 border-t border-border bg-muted/20 p-4"
                     >
                         <input
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
                             placeholder="Ask about architecture, patterns, bugs…"
-                            style={{
-                                flex: 1, padding: "10px 14px", borderRadius: 10,
-                                background: "rgba(255,255,255,0.05)",
-                                border: "1px solid rgba(255,255,255,0.08)",
-                                color: "#e2e8f0", fontSize: 13, outline: "none",
-                            }}
+                            className="flex-1 rounded-xl border border-border bg-background/50 px-4 py-2.5 font-mono text-xs text-foreground outline-none ring-primary/20 transition-all focus:border-primary/50 focus:ring-1"
                         />
-                        <button
+                        <Button
                             onClick={sendMessage}
                             disabled={!input.trim() || isChatLoading}
-                            style={{
-                                padding: "10px 18px", borderRadius: 10, fontWeight: 700, fontSize: 13,
-                                background: input.trim() && !isChatLoading
-                                    ? "linear-gradient(135deg,#6366f1,#7c3aed)"
-                                    : "rgba(255,255,255,0.05)",
-                                border: "none", color: "#fff", cursor: "pointer",
-                                transition: "all 0.2s",
-                                boxShadow: input.trim() && !isChatLoading ? "0 0 14px rgba(99,102,241,0.4)" : "none",
-                            }}
+                            size="icon"
+                            className="h-10 w-10 shrink-0 rounded-xl bg-primary text-primary-foreground shadow-[0_0_20px_rgba(var(--primary),0.3)] transition-all hover:scale-105 active:scale-95"
                         >
-                            ➤
-                        </button>
+                            <Send className="h-4 w-4" />
+                        </Button>
                     </div>
                 </div>
 
                 {/* ── RIGHT COLUMN ── */}
-                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                <div className="flex flex-col gap-6">
 
                     {/* Quest Card */}
                     <div
-                        style={{
-                            ...glass,
-                            border: "1px solid rgba(251,146,60,0.3)",
-                            boxShadow: "0 0 20px rgba(251,146,60,0.08)",
-                            padding: "18px",
-                        }}
+                        className="rounded-2xl border border-warning/30 bg-warning/5 p-5 backdrop-blur-sm shadow-[inset_0_0_40px_rgba(var(--warning),0.05)]"
                     >
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                            <span style={{ fontSize: 18 }}>⚔️</span>
-                            <span style={{ fontWeight: 800, fontSize: 14 }}>Daily Quest</span>
+                        <div className="mb-4 flex items-center gap-2">
+                            <Sword className="h-5 w-5 text-warning" />
+                            <span className="font-mono text-sm font-black uppercase tracking-widest text-warning">Daily Quest</span>
                             {quest && (
-                                <span
-                                    style={{
-                                        marginLeft: "auto", padding: "3px 10px", borderRadius: 99, fontSize: 11,
-                                        fontWeight: 700, background: "rgba(251,146,60,0.15)",
-                                        border: "1px solid rgba(251,146,60,0.35)", color: "#fb923c",
-                                    }}
+                                <Badge
+                                    variant="outline"
+                                    className="ml-auto border-warning/40 bg-warning/10 font-mono text-[10px] font-bold text-warning"
                                 >
                                     +{quest.xp_reward} XP
-                                </span>
+                                </Badge>
                             )}
                         </div>
 
                         {questLoading ? (
-                            <div style={{ color: "#64748b", fontSize: 13 }}>⏳ Fetching quest from SonarQube…</div>
+                            <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground opacity-60">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Fetching quest from SonarQube…
+                            </div>
                         ) : quest ? (
-                            <>
-                                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6, color: "#fbbf24" }}>
-                                    {quest.title}
-                                </div>
-                                <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 10, lineHeight: 1.6 }}>
-                                    {quest.issue_description}
+                            <div className="space-y-4">
+                                <div>
+                                    <div className="mb-1 font-mono text-sm font-black text-warning uppercase">{quest.title}</div>
+                                    <p className="font-mono text-[11px] leading-relaxed text-muted-foreground opacity-80">
+                                        {quest.issue_description}
+                                    </p>
                                 </div>
                                 <div
-                                    style={{
-                                        fontSize: 11, color: "#64748b", padding: "5px 10px",
-                                        background: "rgba(255,255,255,0.04)", borderRadius: 6, marginBottom: 12,
-                                        fontFamily: "monospace",
-                                    }}
+                                    className="flex items-center gap-2 rounded-lg border border-border bg-background/50 px-3 py-2 font-mono text-[10px] text-muted-foreground"
                                 >
-                                    📁 {quest.file_path}
+                                    <Terminal className="h-3.5 w-3.5 opacity-60" />
+                                    {quest.file_path}
                                 </div>
-                                <a
-                                    href={quest.sonar_link}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    style={{
-                                        display: "inline-flex", alignItems: "center", gap: 6,
-                                        padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700,
-                                        background: "linear-gradient(135deg,#f97316,#dc2626)",
-                                        color: "#fff", textDecoration: "none",
-                                        boxShadow: "0 0 14px rgba(249,115,22,0.3)",
-                                    }}
+                                <Button
+                                    asChild
+                                    variant="outline"
+                                    className="w-full h-10 gap-2 border-warning/40 font-mono text-[10px] font-black uppercase tracking-widest text-warning hover:bg-warning/10"
                                 >
-                                    Fix on SonarQube ↗
-                                </a>
-                            </>
+                                    <a
+                                        href={quest.sonar_link}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                    >
+                                        Fix on SonarQube <Send className="h-3 w-3" />
+                                    </a>
+                                </Button>
+                            </div>
                         ) : (
-                            <div style={{ color: "#64748b", fontSize: 13 }}>No quest available.</div>
+                            <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground opacity-60">No quest available.</div>
                         )}
                     </div>
 
                     {/* Onboarding Checklist */}
-                    <div style={{ ...glass, ...neonBorder, padding: 18, flex: 1 }}>
-                        <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-                            <span>📋</span> Onboarding — {role}
+                    <div className="flex flex-1 flex-col rounded-2xl border border-border bg-card/30 p-5 backdrop-blur-md">
+                        <div className="mb-4 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <ScrollText className="h-5 w-5 text-primary" />
+                                <span className="font-mono text-sm font-black uppercase tracking-widest text-foreground">Onboarding</span>
+                            </div>
                             {!onboardingLoading && (
-                                <span style={{ marginLeft: "auto", fontSize: 11, color: "#64748b" }}>
-                                    {checkedIds.size}/{onboarding.length} done
+                                <span className="font-mono text-[10px] font-black text-primary">
+                                    {checkedIds.size}/{onboarding.length} COMPLETE
                                 </span>
                             )}
                         </div>
                         {onboardingLoading ? (
-                            <div style={{ color: "#64748b", fontSize: 13 }}>Loading checklist…</div>
+                            <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground opacity-60">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Loading checklist…
+                            </div>
                         ) : (
-                            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                            <div className="flex flex-col gap-2">
                                 {onboarding.map((step) => {
                                     const done = checkedIds.has(step.id)
                                     return (
                                         <div
                                             key={step.id}
                                             onClick={() => toggleCheck(step.id)}
-                                            style={{
-                                                padding: "10px 12px", borderRadius: 10,
-                                                background: done ? "rgba(99,102,241,0.1)" : "rgba(255,255,255,0.03)",
-                                                border: done ? "1px solid rgba(99,102,241,0.3)" : "1px solid rgba(255,255,255,0.06)",
-                                                cursor: "pointer", transition: "all 0.2s",
-                                            }}
+                                            className={`group relative cursor-pointer overflow-hidden rounded-xl border p-3.5 transition-all duration-300 ${done
+                                                    ? "border-success/30 bg-success/5 opacity-80"
+                                                    : "border-border bg-muted/20 hover:border-primary/40 hover:bg-muted/30"
+                                                }`}
                                         >
-                                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                            <div className="flex items-center gap-3">
                                                 <div
-                                                    style={{
-                                                        width: 16, height: 16, borderRadius: 4,
-                                                        border: done ? "none" : "1px solid #475569",
-                                                        background: done ? "linear-gradient(135deg,#6366f1,#7c3aed)" : "transparent",
-                                                        display: "flex", alignItems: "center", justifyContent: "center",
-                                                        fontSize: 10, flexShrink: 0,
-                                                    }}
+                                                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-lg border transition-all duration-300 ${done
+                                                            ? "border-success bg-success text-success-foreground"
+                                                            : "border-muted-foreground/30 bg-background"
+                                                        }`}
                                                 >
-                                                    {done && "✓"}
+                                                    {done && <CheckCircle2 className="h-3.5 w-3.5" />}
                                                 </div>
                                                 <span
-                                                    style={{
-                                                        fontSize: 13, fontWeight: 600,
-                                                        color: done ? "#a78bfa" : "#e2e8f0",
-                                                        textDecoration: done ? "line-through" : "none",
-                                                    }}
+                                                    className={`font-mono text-xs font-bold leading-none ${done ? "text-success/70 line-through" : "text-foreground"
+                                                        }`}
                                                 >
                                                     {step.task}
                                                 </span>
                                             </div>
                                             {!done && (
-                                                <div style={{ fontSize: 11, color: "#64748b", marginLeft: 24, marginTop: 4, lineHeight: 1.5 }}>
+                                                <div className="mt-2.5 pl-8 font-mono text-[10px] leading-relaxed text-muted-foreground opacity-70 transition-all duration-300 group-hover:opacity-100">
                                                     {step.description}
                                                 </div>
                                             )}
@@ -550,18 +472,10 @@ export function MentorView() {
 
             {/* ── Keyframe styles ── */}
             <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.4; }
-        }
-        @keyframes bounce {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-5px); }
-        }
         ::-webkit-scrollbar { width: 4px; height: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.4); border-radius: 4px; }
-        input::placeholder { color: #475569; }
+        ::-webkit-scrollbar-thumb { background: rgba(var(--primary), 0.2); border-radius: 4px; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
       `}</style>
         </div>
     )
