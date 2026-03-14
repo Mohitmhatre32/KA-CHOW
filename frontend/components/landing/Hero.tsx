@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Zap } from "lucide-react";
+import { ArrowRight, LayoutGrid, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { getAllRepos } from "@/lib/repo-store";
 
 interface HeroProps {
     scrollProgress: number;
@@ -14,11 +14,13 @@ export const Hero = ({ scrollProgress }: HeroProps) => {
     const router = useRouter();
     const [isVisible, setIsVisible] = useState(false);
     const [hoveredButton, setHoveredButton] = useState<string | null>(null);
+    const [hasRepos, setHasRepos] = useState(false);
 
     useEffect(() => {
         const timer = setTimeout(() => {
             setIsVisible(true);
         }, 300);
+        setHasRepos(getAllRepos().length > 0);
 
         return () => clearTimeout(timer);
     }, []);
@@ -88,26 +90,45 @@ export const Hero = ({ scrollProgress }: HeroProps) => {
                         }`}
                     style={{ transitionDelay: "600ms" }}
                 >
-                    <Button 
-                        size="lg" 
-                        onClick={() => router.push("/import-repository")}
-                        className="h-12 px-8 text-md font-semibold"
-                    >
-                        Get Started
-                        <ArrowRight className="ml-2 h-5 w-5" />
-                    </Button>
-
-                    <Button 
-                        variant="outline" 
-                        size="lg"
-                        className="h-12 px-8 text-md"
-                        onClick={() => {
-                            const el = document.getElementById("features-section");
-                            el?.scrollIntoView({ behavior: "smooth" });
-                        }}
-                    >
-                        Learn More
-                    </Button>
+                    {hasRepos ? (
+                        <><Button
+                            size="lg"
+                            onClick={() => router.push("/repositories")}
+                            className="h-12 px-8 text-md font-semibold"
+                        >
+                            <LayoutGrid className="mr-2 h-5 w-5" />
+                            Your Repositories
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="lg"
+                            onClick={() => router.push("/import-repository")}
+                            className="h-12 px-8 text-md"
+                        >
+                            Import New Repo
+                            <ArrowRight className="ml-2 h-5 w-5" />
+                        </Button></>
+                    ) : (
+                        <><Button
+                            size="lg"
+                            onClick={() => router.push("/import-repository")}
+                            className="h-12 px-8 text-md font-semibold"
+                        >
+                            Get Started
+                            <ArrowRight className="ml-2 h-5 w-5" />
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="lg"
+                            className="h-12 px-8 text-md"
+                            onClick={() => {
+                                const el = document.getElementById("features-section");
+                                el?.scrollIntoView({ behavior: "smooth" });
+                            }}
+                        >
+                            Learn More
+                        </Button></>
+                    )}
                 </div>
             </div>
 

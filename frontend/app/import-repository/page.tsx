@@ -135,7 +135,7 @@ export default function ImportRepositoryPage() {
       const newId = upsertRepo(storeUrl, data)
       setActiveRepoId(newId)
 
-      setTimeout(() => router.push("/dashboard"), 600)
+      setTimeout(() => router.push(`/dashboard/${newId}`), 600)
     } catch (err) {
       if (intervalRef.current) clearInterval(intervalRef.current)
       setIsLoading(false)
@@ -149,7 +149,7 @@ export default function ImportRepositoryPage() {
       <Button
         variant="ghost"
         size="sm"
-        onClick={() => router.push(getAllRepos().length > 0 ? "/dashboard" : "/")}
+        onClick={() => router.push("/repositories")}
         className="absolute left-6 top-6 gap-2 text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />
