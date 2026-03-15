@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/resizable"
 
 // API Call
-import { triggerSonarScan } from "@/lib/api"
+import { triggerSonarScan, analyzeRepository } from "@/lib/api"
 
 // Dashboard Components
 import { GraphView } from "@/components/dashboard/graph-view"
@@ -43,7 +43,7 @@ import { ArchitectView } from "@/components/dashboard/architect-view"
 import { AlertsInbox } from "@/components/dashboard/alerts-inbox"
 
 // Utilities
-import { getActiveRepo, setActiveRepoId, getAllRepos } from "@/lib/repo-store"
+import { getActiveRepo, setActiveRepoId, getAllRepos, upsertRepo } from "@/lib/repo-store"
 
 type MainView = "graph" | "guardian" | "architect" | "mentor"
 type PanelType = "chat" | "health" | null
@@ -63,11 +63,20 @@ export default function DashboardPage() {
   const [activeRepoBranch, setActiveRepoBranch] = useState<string | null>(null)
   const [isScanning, setIsScanning] = useState(false)
 
+  const [loadRepoUrl, setLoadRepoUrl] = useState("")
+  const [loadBranch, setLoadBranch] = useState("main")
+  const [loadForce, setLoadForce] = useState(false)
+  const [isLoadingRepo, setIsLoadingRepo] = useState(false)
+
   const refreshActiveRepo = useCallback(() => {
     const repo = getActiveRepo()
     setActiveRepoName(repo?.repo_name ?? null)
     setActiveRepoUrl(repo?.repo_url ?? null)
     setActiveRepoBranch(repo?.data.branch ?? "main")
+    
+    setLoadRepoUrl(repo?.repo_url ?? "")
+    setLoadBranch(repo?.data.branch ?? "main")
+
     setMainView("graph")
     setActivePanel(null)
   }, [])
@@ -113,6 +122,22 @@ export default function DashboardPage() {
     }
   }
 
+  const handleLoadRepo = async () => {
+    if (!loadRepoUrl) return
+    setIsLoadingRepo(true)
+    try {
+      const data = await analyzeRepository(loadRepoUrl, loadBranch, loadForce)
+      const newId = upsertRepo(loadRepoUrl, data)
+      setActiveRepoId(newId)
+      router.push(`/dashboard/${newId}`)
+    } catch (e) {
+      console.error(e)
+      alert("Error loading repo: " + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setIsLoadingRepo(false)
+    }
+  }
+
   return (
     <div className={`flex h-screen flex-col bg-background transition-opacity duration-700 ${mounted ? "opacity-100" : "opacity-0"}`}>
       {/* ─── TOP BAR ─── */}
@@ -129,45 +154,49 @@ export default function DashboardPage() {
 
           <Separator orientation="vertical" className="h-6 hidden md:block" />
 
+          {/* INDEX.HTML DASHBOARD INPUTS */}
+          <div className="flex items-center gap-2">
+            <input 
+              type="text"
+              value={loadRepoUrl}
+              onChange={(e) => setLoadRepoUrl(e.target.value)}
+              placeholder="GitHub URL or local path…"
+              className="h-8 w-64 rounded-md border border-border bg-card px-3 text-xs font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground"
+            />
+            <input
+              type="text"
+              value={loadBranch}
+              onChange={(e) => setLoadBranch(e.target.value)}
+              placeholder="main"
+              className="h-8 w-24 rounded-md border border-border bg-card px-3 text-xs font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground"
+            />
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer whitespace-nowrap">
+              <input 
+                type="checkbox" 
+                checked={loadForce}
+                onChange={(e) => setLoadForce(e.target.checked)}
+                className="accent-primary"
+              />
+              Force rescan
+            </label>
+            <Button
+              size="sm"
+              onClick={handleLoadRepo}
+              disabled={isLoadingRepo || !loadRepoUrl}
+              className="h-8 bg-primary text-black font-semibold hover:bg-primary/90 hidden sm:flex"
+            >
+              {isLoadingRepo ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : "⚡ "}
+              Load
+            </Button>
+          </div>
+
           {activeRepoName ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 hidden lg:flex">
               <Badge variant="outline" className="font-mono text-[10px] py-0 px-2 border-primary/30 text-primary bg-primary/5">
                 {activeRepoName}
               </Badge>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleTriggerScan}
-                disabled={isScanning}
-                className="h-6 px-2 text-[10px] font-bold text-success hover:bg-success/10 hover:text-success"
-              >
-                {isScanning ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <ShieldAlert className="h-3 w-3 mr-1" />}
-                SCAN
-              </Button>
             </div>
-          ) : (
-            <Badge variant="secondary" className="font-mono text-[10px] py-0 px-2 opacity-50">
-              DEMO_CONTENT
-            </Badge>
-          )}
-
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => router.push("/import-repository")}
-                  className="h-6 w-6 border-dashed opacity-50 hover:opacity-100"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Import Repository</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          ) : null}
         </div>
 
         <div className="flex items-center gap-2">

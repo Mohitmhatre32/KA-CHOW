@@ -11,6 +11,20 @@ class Settings:
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
     LLM_MODEL: str = os.getenv("LLM_MODEL", "llama-3.3-70b-versatile")
     
+    # Jira Integration
+    JIRA_URL: str = os.getenv("JIRA_URL", "")
+    JIRA_EMAIL: str = os.getenv("JIRA_EMAIL", "")
+    JIRA_API_TOKEN: str = os.getenv("JIRA_API_TOKEN", "")
+
+    # SonarQube
+    SONAR_URL: str = os.getenv("SONAR_URL", "http://localhost:9000")
+    SONAR_TOKEN: str = os.getenv("SONAR_TOKEN", "")
+
+    # Server
+    APP_HOST: str = os.getenv("APP_HOST", "0.0.0.0")
+    APP_PORT: int = int(os.getenv("APP_PORT", 8000))
+    APP_ENV: str = os.getenv("APP_ENV", "development")
+
     # Paths
     BASE_DIR: str = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     REPO_STORAGE_PATH: str = os.path.join(BASE_DIR, "storage", "repos")

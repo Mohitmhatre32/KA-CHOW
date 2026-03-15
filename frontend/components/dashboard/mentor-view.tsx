@@ -1,6 +1,8 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 import {
     fetchMentorChat,
     getOnboardingPath,
@@ -56,67 +58,6 @@ function SonarBadge({ stats }: { stats: Record<string, unknown> }) {
     )
 }
 
-function formatContent(content: string) {
-    const parts = content.split(/(```[\s\S]*?```)/g)
-    return parts.map((part, i) => {
-        if (part.startsWith("```")) {
-            const codeContent = part.replace(/```\w*\n?/, "").replace(/```$/, "")
-            return (
-                <pre key={i} className="my-3 overflow-x-auto rounded-lg border border-border bg-black/40 p-3.5 font-mono text-xs leading-relaxed text-muted-foreground shadow-sm">
-                    <code>{codeContent}</code>
-                </pre>
-            )
-        }
-
-        // For non-code blocks, handle lines for headers and bullets
-        const lines = part.split("\n")
-        return (
-            <div key={i}>
-                {lines.map((line, li) => {
-                    if (!line.trim() && li > 0) return <div key={li} className="h-2" />
-
-                    let contentNode: React.ReactNode = line
-
-                    // Handle Headers
-                    if (line.trim().startsWith("### ")) {
-                        contentNode = <h3 className="mb-1 mt-3 font-mono text-[13px] font-bold text-foreground">{line.trim().slice(4)}</h3>
-                    } else if (line.trim().startsWith("## ")) {
-                        contentNode = <h2 className="mb-2 mt-4 font-mono text-sm font-bold text-foreground uppercase tracking-tight">{line.trim().slice(3)}</h2>
-                    } else if (line.trim().startsWith("# ")) {
-                        contentNode = <h1 className="mb-2 mt-5 font-mono text-base font-black text-foreground uppercase tracking-widest border-b border-border pb-1">{line.trim().slice(2)}</h1>
-                    } else if (line.trim().startsWith("- ")) {
-                        // Simple bullet
-                        const bulletText = line.trim().slice(2)
-                        contentNode = (
-                            <div className="mb-1 ml-1 flex gap-2 font-mono text-xs leading-relaxed text-muted-foreground">
-                                <span className="font-bold text-primary">•</span>
-                                <span>{parseInline(bulletText)}</span>
-                            </div>
-                        )
-                    } else {
-                        contentNode = <p className="leading-relaxed">{parseInline(line)}</p>
-                    }
-
-                    return <div key={li}>{contentNode}</div>
-                })}
-            </div>
-        )
-    })
-}
-
-function parseInline(text: string) {
-    const segments = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g)
-    return segments.map((seg, j) => {
-        if (seg.startsWith("**") && seg.endsWith("**")) {
-            return <strong key={j} className="font-bold text-foreground">{seg.slice(2, -2)}</strong>
-        }
-        if (seg.startsWith("`") && seg.endsWith("`")) {
-            return <code key={j} className="rounded bg-muted/40 px-1 py-0.5 font-mono text-[11px] font-medium text-primary border border-border/50">{seg.slice(1, -1)}</code>
-        }
-        return seg
-    })
-}
-
 function ChatMessage({ role, content }: { role: "user" | "ai"; content: string }) {
     const isUser = role === "user"
     return (
@@ -137,7 +78,44 @@ function ChatMessage({ role, content }: { role: "user" | "ai"; content: string }
                     }`}
             >
                 <div className="font-mono text-xs leading-relaxed">
-                    {formatContent(content)}
+                    {isUser ? (
+                        <div className="whitespace-pre-wrap">{content}</div>
+                    ) : (
+                        <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                                code: ({ node, className, children, ...props }: any) => {
+                                    const match = /language-(\w+)/.exec(className || "")
+                                    const isInline = !match && !String(children).includes("\n")
+                                    return isInline ? (
+                                        <code className="rounded bg-muted/40 px-1 py-0.5 font-mono text-[11px] font-medium text-primary border border-border/50" {...props}>
+                                            {children}
+                                        </code>
+                                    ) : (
+                                        <code className={className} {...props}>
+                                            {children}
+                                        </code>
+                                    )
+                                },
+                                pre: ({ children }) => (
+                                    <pre className="my-3 overflow-x-auto rounded-lg border border-border bg-black/40 p-3.5 font-mono text-xs leading-relaxed text-muted-foreground shadow-sm">
+                                        {children}
+                                    </pre>
+                                ),
+                                p: ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,
+                                h1: ({ children }) => <h1 className="mb-2 mt-5 font-mono text-base font-black text-foreground uppercase tracking-widest border-b border-border pb-1">{children}</h1>,
+                                h2: ({ children }) => <h2 className="mb-2 mt-4 font-mono text-sm font-bold text-foreground uppercase tracking-tight">{children}</h2>,
+                                h3: ({ children }) => <h3 className="mb-1 mt-3 font-mono text-[13px] font-bold text-foreground">{children}</h3>,
+                                ul: ({ children }) => <ul className="mb-2 ml-4 list-disc space-y-1 text-muted-foreground marker:text-primary">{children}</ul>,
+                                ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal space-y-1 text-muted-foreground marker:text-primary">{children}</ol>,
+                                li: ({ children }) => <li className="pl-1 leading-relaxed text-muted-foreground">{children}</li>,
+                                strong: ({ children }) => <strong className="font-bold text-foreground">{children}</strong>,
+                                a: ({ href, children }) => <a href={href} target="_blank" rel="noreferrer" className="text-primary hover:underline font-medium">{children}</a>
+                            }}
+                        >
+                            {content}
+                        </ReactMarkdown>
+                    )}
                 </div>
                 {isUser && (
                     <div className="invisible absolute -left-12 top-1/2 flex -translate-y-1/2 items-center gap-1 group-hover:visible">

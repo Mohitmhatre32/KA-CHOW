@@ -25,6 +25,7 @@ from git import Repo, InvalidGitRepositoryError
 from app.core.config import settings
 from app.core.alerts import alert_system
 from app.core import vector_store as vs
+from app.core.llm import client as groq_client
 from .models import GraphResponse, FileNode, CommitInfo
 
 # ── Commit-type classifier ───────────────────────────────────────────────────
@@ -336,6 +337,10 @@ class LibrarianService:
 
         doc_ratio = (documented_functions / total_functions) if total_functions > 0 else 0.0
 
+        # ── PASS 5: Generate Architecture Map & Docs (for Mentor RAG) ───────
+        self._write_arch_map(root, G)
+        self._generate_docs(name, root, nodes_data, edges_data)
+
         return GraphResponse(
             project_name=name,
             branch=branch,
@@ -447,6 +452,83 @@ class LibrarianService:
         )
         return resp
 
+
+    @staticmethod
+    def _write_arch_map(root_path: str, G: nx.DiGraph):
+        """Writes a summarized architecture map for RAG consumption."""
+        map_path = os.path.join(root_path, "_kachow_architecture_map.md")
+        try:
+            with open(map_path, "w", encoding="utf-8") as f:
+                f.write("# KA-CHOW System Architecture & Dependency Map\n\n")
+                f.write("## 1. File Modules\n")
+                for n, d in G.nodes(data=True):
+                    f.write(f"- `{n}` (Type: {d.get('type', 'file')})\n")
+                
+                f.write("\n## 2. Dependencies\n")
+                for u, v, d in G.edges(data=True):
+                    rel = d.get('relation', 'imports')
+                    f.write(f"- `{u}` -> {rel} -> `{v}`\n")
+            print(f"[Librarian] wrote architecture map to {map_path}")
+        except Exception as e:
+            print(f"[Librarian] map write failed: {e}")
+
+    def _generate_docs(self, project_name: str, project_root: str, nodes: List[FileNode], edges: List[Dict[str, str]]):
+        """Generates AI-powered README.md and PRD.md for the project."""
+        
+        # Gather core context
+        project_context = ""
+        core_files = ["README.md", "package.json", "requirements.txt", "go.mod", "pom.xml", "main.py", "app.py", "index.ts", "index.js"]
+        found_context = []
+        for file in core_files:
+            p = os.path.join(project_root, file)
+            if os.path.exists(p):
+                try:
+                    with open(p, "r", encoding="utf-8", errors="ignore") as f:
+                        content = f.read(2000)
+                        found_context.append(f"--- File: {file} ---\n{content}\n")
+                except: pass
+        
+        project_context = "\n".join(found_context) if found_context else "No core config files found."
+
+        system_prompt = "You are an expert Technical Writer and Software Architect. Generate professional project documentation based on file snippets and metrics."
+        
+        readme_prompt = f"""Generate a high-quality README.md for '{project_name}'.
+CONTEXT:
+{project_context}
+METRICS:
+- Total Files: {len(nodes)}
+- Total Dependencies: {len(edges)}
+Output ONLY markdown."""
+
+        prd_prompt = f"""Generate a professional Product Requirements Document (PRD) for '{project_name}'.
+CONTEXT:
+{project_context}
+METRICS:
+- Nodes: {len(nodes)}
+- Dependencies: {len(edges)}
+Output ONLY markdown."""
+
+        try:
+            readme_res = groq_client.chat.completions.create(
+                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": readme_prompt}],
+                model=settings.LLM_MODEL,
+            )
+            readme = readme_res.choices[0].message.content
+
+            prd_res = groq_client.chat.completions.create(
+                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": prd_prompt}],
+                model=settings.LLM_MODEL,
+            )
+            prd = prd_res.choices[0].message.content
+
+            # Write to disk
+            with open(os.path.join(project_root, "README.md"), "w", encoding="utf-8") as f:
+                f.write(readme)
+            with open(os.path.join(project_root, "PRD.md"), "w", encoding="utf-8") as f:
+                f.write(prd)
+            print(f"[Librarian] generated README and PRD for {project_name}")
+        except Exception as e:
+            print(f"[Librarian] doc gen failed: {e}")
 
 # Singleton used by the router
 librarian = LibrarianService()
