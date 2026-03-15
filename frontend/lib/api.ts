@@ -191,6 +191,18 @@ export interface ImpactResult {
   summary: string
 }
 
+export interface JiraTicketData {
+  key: string
+  summary: string
+  status: string
+  description: string
+}
+
+export interface JiraCreateTasksRequest {
+  parent_key: string
+  tasks: string[]
+}
+
 /**
  * Runs blast-radius impact analysis.
  * Endpoint: POST /api/architect/impact
@@ -211,6 +223,17 @@ export async function architectAnalyzeImpact(req: ImpactAnalysisRequest): Promis
     affected_services: data.impacted_files.map(f => ({ name: f.file_path, reason: f.reason })),
     summary: `${data.total_impacted} files affected at depth ${data.blast_radius_depth}`,
   }
+}
+
+export async function syncJiraTicket(key: string): Promise<JiraTicketData> {
+  return get<JiraTicketData>(`/api/architect/jira/ticket/${key}`)
+}
+
+export async function createJiraTasks(parentKey: string, tasks: string[]): Promise<{success: boolean, message: string}> {
+  return post<{success: boolean, message: string}>("/api/architect/jira/tasks", {
+    parent_key: parentKey,
+    tasks: tasks,
+  })
 }
 
 // ─── Guardian Agent ───────────────────────────────────────────────────────────

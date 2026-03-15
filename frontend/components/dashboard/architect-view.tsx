@@ -29,6 +29,8 @@ import {
     scaffoldProject,
     architectAnalyzeImpact,
     getFileContent,
+    syncJiraTicket,
+    createJiraTasks,
     type ScaffoldResponse,
     type ImpactResult,
 } from "@/lib/api"
@@ -53,14 +55,7 @@ const DEFAULT_JIRA_JSON = JSON.stringify(
     2
 )
 
-// Impact Analyzer demo
-const DEMO_ENDPOINTS = [
-    "/api/v1/getUser",
-    "/api/v1/createOrder",
-    "/api/v1/billing/charge",
-    "/api/v1/notifications/send",
-    "/api/v1/auth/login",
-]
+
 
 // Architecture drift demo data
 const PLANNED_SERVICES = [
@@ -247,12 +242,65 @@ export function ArchitectView() {
     const [isContentLoading, setIsContentLoading] = useState(false)
 
     // ── Impact analyzer state ──
-    const [targetEndpoint, setTargetEndpoint] = useState(DEMO_ENDPOINTS[0])
-    const [proposedChange, setProposedChange] = useState("Change User ID from Integer to String")
+    const [targetEndpoint, setTargetEndpoint] = useState("")
+    const [proposedChange, setProposedChange] = useState("")
     const [impactLoading, setImpactLoading] = useState(false)
     const [impactResult, setImpactResult] = useState<ImpactResult | null>(null)
+    const [exportingTasks, setExportingTasks] = useState(false)
 
     const [error, setError] = useState<string | null>(null)
+
+    // ── Jira Sync ──
+    const [jiraKeyInput, setJiraKeyInput] = useState("")
+    const [isSyncingJira, setIsSyncingJira] = useState(false)
+    const [jiraSuccess, setJiraSuccess] = useState<string | null>(null)
+
+    const handleJiraSync = useCallback(async () => {
+        if (!jiraKeyInput.trim()) {
+            setError("Please enter a Jira ticket key to sync.")
+            return
+        }
+        setIsSyncingJira(true)
+        setError(null)
+        setJiraSuccess(null)
+        try {
+            const ticketData = await syncJiraTicket(jiraKeyInput.trim())
+            
+            // Format for scaffolding prompt
+            const formatted = JSON.stringify({
+                ticket: ticketData.key,
+                summary: ticketData.summary,
+                status: ticketData.status,
+                description: ticketData.description
+            }, null, 2)
+
+            setJiraInput(formatted)
+            setJiraSuccess(`Synced ${ticketData.key}: ${ticketData.summary}`)
+        } catch (e: unknown) {
+            setError(e instanceof Error ? e.message : "Jira sync failed")
+        } finally {
+            setIsSyncingJira(false)
+        }
+    }, [jiraKeyInput])
+
+    // ── Create Tasks ──
+    const handleCreateJiraTasks = useCallback(async () => {
+        if (!jiraKeyInput.trim() || !impactResult) return
+        
+        setExportingTasks(true)
+        setError(null)
+        setJiraSuccess(null)
+        
+        try {
+            const tasks = impactResult.affected_services.map(s => `Fix/Verify impact in ${s.name} [Reason: ${s.reason}]`)
+            const res = await createJiraTasks(jiraKeyInput.trim(), tasks)
+            setJiraSuccess(res.message)
+        } catch (e: unknown) {
+            setError(e instanceof Error ? e.message : "Task creation failed")
+        } finally {
+            setExportingTasks(false)
+        }
+    }, [jiraKeyInput, impactResult])
 
     // ── Scaffold handler ──
     const handleScaffold = useCallback(async () => {
@@ -357,6 +405,34 @@ export function ArchitectView() {
                             </span>
                         </div>
 
+                        <div className="flex flex-col gap-2 mb-2 rounded-xl border border-zinc-800/80 bg-zinc-950/50 p-3">
+                            <label className="font-mono text-[10px] uppercase tracking-wider text-zinc-600">
+                                Jira Ticket Sync
+                            </label>
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    placeholder="e.g. TICKET-123"
+                                    value={jiraKeyInput}
+                                    onChange={(e) => setJiraKeyInput(e.target.value)}
+                                    className="flex-1 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-1.5 font-mono text-xs text-zinc-300 outline-none placeholder:text-zinc-600 focus:border-cyan-500/40"
+                                />
+                                <Button
+                                    onClick={handleJiraSync}
+                                    disabled={isSyncingJira || !jiraKeyInput.trim()}
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-8 gap-2 border-primary/30 text-primary hover:bg-primary/10"
+                                >
+                                    {isSyncingJira ? <RefreshCw className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                                    Sync
+                                </Button>
+                            </div>
+                            {jiraSuccess && (
+                                <p className="font-mono text-[10px] text-emerald-400 mt-1">{jiraSuccess}</p>
+                            )}
+                        </div>
+
                         <div
                             className="flex flex-1 flex-col overflow-hidden rounded-xl border border-zinc-800/80"
                             style={{ background: "rgba(8,10,18,0.95)", minHeight: "320px" }}
@@ -364,7 +440,7 @@ export function ArchitectView() {
                             {/* Editor header */}
                             <div className="flex items-center gap-2 border-b border-zinc-800/60 px-4 py-2.5">
                                 <FileJson className="h-3.5 w-3.5 text-amber-400" />
-                                <span className="font-mono text-xs font-semibold text-amber-300">ticket_DEV-202.json</span>
+                                <span className="font-mono text-xs font-semibold text-amber-300">architect_requirements.json</span>
                                 <span className="ml-auto rounded-full border border-zinc-800 bg-zinc-900 px-2 py-0.5 font-mono text-[10px] text-zinc-600">
                                     EDITABLE
                                 </span>
@@ -534,15 +610,13 @@ export function ArchitectView() {
                                 <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-wider text-zinc-600">
                                     Target Endpoint / File
                                 </label>
-                                <select
+                                <input
+                                    type="text"
                                     value={targetEndpoint}
                                     onChange={(e) => setTargetEndpoint(e.target.value)}
+                                    placeholder="e.g. /api/v1/getUser or auth.py"
                                     className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5 font-mono text-xs text-cyan-300 outline-none transition-colors focus:border-cyan-500/40"
-                                >
-                                    {DEMO_ENDPOINTS.map((ep) => (
-                                        <option key={ep} value={ep}>{ep}</option>
-                                    ))}
-                                </select>
+                                />
                             </div>
 
                             {/* Proposed Change */}
@@ -562,8 +636,8 @@ export function ArchitectView() {
                             {/* Analyze button */}
                             <Button
                                 onClick={handleAnalyzeImpact}
-                                disabled={impactLoading}
-                                className={`h-10 gap-2 font-mono text-xs font-bold transition-all ${impactLoading ? "opacity-50" : "border-destructive/40 bg-destructive/5 text-destructive hover:bg-destructive/10"}`}
+                                disabled={impactLoading || !targetEndpoint.trim() || !proposedChange.trim()}
+                                className={`h-10 gap-2 font-mono text-xs font-bold transition-all ${impactLoading || !targetEndpoint.trim() || !proposedChange.trim() ? "opacity-50" : "border-destructive/40 bg-destructive/5 text-destructive hover:bg-destructive/10"}`}
                                 variant="outline"
                             >
                                 {impactLoading ? (
@@ -605,7 +679,7 @@ export function ArchitectView() {
                                         >
                                             <div className="flex items-center gap-2">
                                                 <XCircle className="h-3.5 w-3.5 text-destructive" />
-                                                <span className="font-mono text-[10px] font-bold uppercase tracking-tight text-destructive">{svc.name}</span>
+                                                <span className="font-mono text-[10px] font-bold uppercase tracking-tight text-destructive truncate">{svc.name}</span>
                                             </div>
                                             <p className="mt-1.5 font-mono text-[10px] leading-relaxed text-muted-foreground opacity-70">
                                                 {svc.reason}
@@ -613,6 +687,16 @@ export function ArchitectView() {
                                         </div>
                                     ))}
                                 </div>
+
+                                {/* Export to Jira */}
+                                <Button
+                                    onClick={handleCreateJiraTasks}
+                                    disabled={exportingTasks || !jiraKeyInput.trim() || impactResult.affected_services.length === 0}
+                                    className="w-full mt-4 bg-[#0052cc] text-white hover:bg-[#0052cc]/90 gap-2 font-mono text-xs font-bold transition-all"
+                                >
+                                    {exportingTasks ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <span>➕</span>}
+                                    {jiraKeyInput.trim() ? "Export to Jira Sub-tasks" : "Enter a Jira ticket key above to export tasks"}
+                                </Button>
                             </div>
                         )}
 

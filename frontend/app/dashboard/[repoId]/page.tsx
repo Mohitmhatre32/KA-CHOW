@@ -57,6 +57,7 @@ export default function DashboardPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [activePanel, setActivePanel] = useState<PanelType>(null)
   const [mainView, setMainView] = useState<MainView>("graph")
+  const [mounted, setMounted] = useState(false)
   const [activeRepoName, setActiveRepoName] = useState<string | null>(null)
   const [activeRepoUrl, setActiveRepoUrl] = useState<string | null>(null)
   const [activeRepoBranch, setActiveRepoBranch] = useState<string | null>(null)
