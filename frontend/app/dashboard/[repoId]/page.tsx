@@ -35,7 +35,6 @@ import { triggerSonarScan, analyzeRepository } from "@/lib/api"
 
 // Dashboard Components
 import { GraphView } from "@/components/dashboard/graph-view"
-import { ChatPanel } from "@/components/dashboard/chat-panel"
 import { HealthPanel } from "@/components/dashboard/health-panel"
 import { GuardianView } from "@/components/dashboard/guardian-view"
 import { MentorView } from "@/components/dashboard/mentor-view"
@@ -46,7 +45,7 @@ import { AlertsInbox } from "@/components/dashboard/alerts-inbox"
 import { getActiveRepo, setActiveRepoId, getAllRepos, upsertRepo } from "@/lib/repo-store"
 
 type MainView = "graph" | "guardian" | "architect" | "mentor"
-type PanelType = "chat" | "health" | null
+type PanelType = "health" | null
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -218,16 +217,6 @@ export default function DashboardPage() {
           </TooltipProvider>
 
           <Button
-            variant={activePanel === "chat" ? "default" : "ghost"}
-            size="sm"
-            onClick={() => togglePanel("chat")}
-            className="h-8 gap-2"
-          >
-            <MessageSquare className="h-4 w-4" />
-            <span className="hidden sm:inline">AI Chat</span>
-          </Button>
-
-          <Button
             variant={activePanel === "health" ? "secondary" : "ghost"}
             size="sm"
             onClick={() => togglePanel("health")}
@@ -334,11 +323,7 @@ export default function DashboardPage() {
               maxSize={40}
               className="bg-card border-l border-border animate-in slide-in-from-right-4 duration-500"
             >
-              {activePanel === "chat" ? (
-                <ChatPanel onClose={() => setActivePanel(null)} />
-              ) : (
-                <HealthPanel onClose={() => setActivePanel(null)} />
-              )}
+              <HealthPanel onClose={() => setActivePanel(null)} />
             </ResizablePanel>
           </>
         )}

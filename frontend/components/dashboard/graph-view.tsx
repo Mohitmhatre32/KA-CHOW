@@ -129,7 +129,63 @@ export function GraphView() {
     setPanStart({ x: e.clientX, y: e.clientY })
   }, [isPanning, panStart, viewBox])
 
+  const activeNodeId = hoveredNode || selectedNodeId
+
   const selectedNode = selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) : null
+
+  // Auto-zoom to selected node
+  useEffect(() => {
+    if (selectedNode && selectedNode.x !== undefined && selectedNode.y !== undefined) {
+      // Find bounding box for node + connected edges to properly zoom
+      let minX = selectedNode.x
+      let maxX = selectedNode.x
+      let minY = selectedNode.y
+      let maxY = selectedNode.y
+
+      edges.forEach((edge) => {
+        if (edge.fromId === selectedNode.id || edge.toId === selectedNode.id) {
+          minX = Math.min(minX, edge.x1, edge.x2)
+          maxX = Math.max(maxX, edge.x1, edge.x2)
+          minY = Math.min(minY, edge.y1, edge.y2)
+          maxY = Math.max(maxY, edge.y1, edge.y2)
+        }
+      })
+
+      const padding = 150
+      const targetW = Math.max((maxX - minX) + padding * 2, 800)
+      const targetH = Math.max((maxY - minY) + padding * 2, 600)
+      const targetX = minX - padding
+      const targetY = minY - padding
+
+      // Smooth zoom transition
+      const startX = viewBox.x
+      const startY = viewBox.y
+      const startW = viewBox.w
+      const startH = viewBox.h
+
+      let startTime: number | null = null
+      const duration = 600
+
+      const animateZoom = (timestamp: number) => {
+        if (!startTime) startTime = timestamp
+        const progress = Math.min((timestamp - startTime) / duration, 1)
+        // easeInOutCubic
+        const ease = progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2
+
+        setViewBox({
+          x: startX + (targetX - startX) * ease,
+          y: startY + (targetY - startY) * ease,
+          w: startW + (targetW - startW) * ease,
+          h: startH + (targetH - startH) * ease,
+        })
+
+        if (progress < 1) {
+          requestAnimationFrame(animateZoom)
+        }
+      }
+      requestAnimationFrame(animateZoom)
+    }
+  }, [selectedNodeId]) // Only re-run when selection changes
 
   const handleGenerateDocs = async () => {
     if (!graphMeta || !rawNodes.length) {
@@ -267,14 +323,16 @@ export function GraphView() {
 
         {/* Edges */}
         {edges.map((edge, i) => {
-          const isHighlighted = hoveredNode === edge.fromId || hoveredNode === edge.toId
+          const isHighlighted = activeNodeId === edge.fromId || activeNodeId === edge.toId
+          const isConnectedToSelected = selectedNodeId === edge.fromId || selectedNodeId === edge.toId
           return (
             <line
               key={i} x1={edge.x1} y1={edge.y1} x2={edge.x2} y2={edge.y2}
               stroke={isHighlighted ? "var(--primary)" : "var(--border)"}
-              strokeWidth={isHighlighted ? 2 : 1}
-              strokeOpacity={isHighlighted ? 0.8 : 0.4}
-              strokeDasharray="4 4" className="animated-edge transition-all duration-300"
+              strokeWidth={isHighlighted ? (isConnectedToSelected ? 3 : 2) : 1}
+              strokeOpacity={isHighlighted ? 0.9 : 0.4}
+              strokeDasharray={isHighlighted ? "none" : "4 4"}
+              className={`${isHighlighted ? 'drop-shadow-[0_0_8px_rgba(88,166,255,0.8)]' : ''} transition-all duration-300`}
             />
           )
         })}
@@ -283,8 +341,20 @@ export function GraphView() {
         {nodes.map((node) => {
           const isHovered = hoveredNode === node.id
           const isSelected = selectedNodeId === node.id
+          const isActive = activeNodeId === node.id
+          
+          // Determine if this node is a neighbor of the active node
+          let isNeighbor = false
+          if (activeNodeId) {
+            isNeighbor = edges.some(e => 
+              (e.fromId === activeNodeId && e.toId === node.id) || 
+              (e.toId === activeNodeId && e.fromId === node.id)
+            )
+          }
+
+          const isDimmed = activeNodeId !== null && !isActive && !isNeighbor
           const IconComponent = typeIcons[node.type]
-          const radius = isHovered || isSelected ? 22 : 18
+          const radius = isActive ? 22 : 18
 
           return (
             <g
@@ -294,10 +364,15 @@ export function GraphView() {
               onMouseEnter={() => setHoveredNode(node.id)}
               onMouseLeave={() => setHoveredNode(null)}
               onClick={(e) => { e.stopPropagation(); setSelectedNodeId(node.id); }}
-              className="node-group cursor-pointer group"
+              className={`node-group cursor-pointer group transition-opacity duration-300 ${isDimmed ? 'opacity-20' : 'opacity-100'}`}
             >
-              <circle r={radius} fill={typeColors[node.type]} fillOpacity={isHovered || isSelected ? 0.3 : 0.12} className="transition-all duration-300" />
-              <circle r={radius} stroke={typeColors[node.type]} strokeWidth="1.5" strokeOpacity={isHovered || isSelected ? 1 : 0.4} fill="none" className="transition-all duration-300" />
+              <circle 
+                r={radius} 
+                fill={typeColors[node.type]} 
+                fillOpacity={isActive ? 0.4 : 0.12} 
+                className={`transition-all duration-300 ${isActive ? 'drop-shadow-[0_0_15px_rgba(88,166,255,1)]' : ''}`}
+              />
+              <circle r={radius} stroke={typeColors[node.type]} strokeWidth="1.5" strokeOpacity={isActive ? 1 : 0.4} fill="none" className="transition-all duration-300" />
 
               {/* Health status dot */}
               {node.sonar_health && (
@@ -316,15 +391,12 @@ export function GraphView() {
             </g>
           )
         })}
+      </svg>
 
-        {/* Info Card Overlay */}
-        {selectedNode && (
-          <foreignObject x={(selectedNode.x ?? 0) + 30} y={(selectedNode.y ?? 0) - 100} width="280" height="340">
-            <div
-              className="flex h-full flex-col rounded-xl border border-border bg-card shadow-2xl overflow-hidden"
-              onWheel={(e) => e.stopPropagation()}
-              onMouseDown={(e) => e.stopPropagation()}
-            >
+      {/* Info Card Overlay - Top Right */}
+      {selectedNode && (
+        <div className="absolute right-4 top-[4.5rem] z-30 w-72 animate-in slide-in-from-right-4 fade-in duration-300">
+          <div className="flex h-[380px] flex-col rounded-xl border border-border bg-card/95 shadow-2xl overflow-hidden backdrop-blur-md">
               <div className="flex items-start justify-between border-b border-border p-3 bg-muted/30 backdrop-blur-md">
                 <div className="overflow-hidden">
                   <h3 className="text-xs font-bold text-foreground truncate">{selectedNode.label}</h3>
@@ -394,9 +466,9 @@ export function GraphView() {
                 )}
               </div>
             </div>
-          </foreignObject>
-        )}
-      </svg>
+          </div>
+      )}
+
 
       {/* 3. Interaction Hint Overlay (Bottom Left) */}
       <div className="absolute bottom-4 left-4 flex flex-col gap-0.5 pointer-events-none">
