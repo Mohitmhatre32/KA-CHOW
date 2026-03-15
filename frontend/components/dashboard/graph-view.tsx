@@ -17,12 +17,12 @@ import { DocsModal } from "./docs-modal"
 
 // --- Constants & Labels ---
 const typeColors: Record<GraphNode["type"], string> = {
-  module: "var(--primary)", 
-  component: "var(--success)", 
-  utility: "var(--warning)", 
-  api: "var(--destructive)", 
+  module: "var(--primary)",
+  component: "var(--success)",
+  utility: "var(--warning)",
+  api: "var(--destructive)",
   hook: "var(--accent)",
-  file: "var(--muted-foreground)", 
+  file: "var(--muted-foreground)",
   folder: "var(--border)",
 }
 
@@ -64,9 +64,9 @@ export function GraphView() {
   const { nodes: rawNodes, graphMeta, isLive, isRefreshing, refresh } = useGraphData()
   const [nodes, setNodes] = useState<(GraphNode & d3.SimulationNodeDatum)[]>([])
 
-  // 1. Initialize Simulation
+  // 1. Initialize Simulation (Pre-calculated layout to avoid blooming animation)
   useEffect(() => {
-    setMounted(true)
+    setMounted(false)
     if (!rawNodes.length) return
 
     const simulationNodes = rawNodes.map((n) => ({ ...n })) as (GraphNode & d3.SimulationNodeDatum)[]
@@ -85,47 +85,20 @@ export function GraphView() {
       .force("x", d3.forceX(500).strength(0.2))
       .force("y", d3.forceY(400).strength(0.2))
       .force("collide", d3.forceCollide().radius(55))
-      .on("tick", () => {
-        setNodes([...simulationNodes])
-      })
+      .stop()
+
+    // Pre-calculate positions so it starts settled
+    simulation.tick(300)
+    setNodes(simulationNodes)
+
+    // Trigger mount animation after layout is ready
+    setTimeout(() => setMounted(true), 50)
 
     simRef.current = simulation
     return () => {
       simulation.stop()
     }
   }, [rawNodes])
-
-  // 2. Dragging Logic
-  useEffect(() => {
-    if (!svgRef.current || !nodes.length) return
-
-    const svg = d3.select(svgRef.current)
-
-    const drag = d3.drag<SVGGElement, any>()
-      .on("start", (event) => {
-        if (!event.active) simRef.current?.alphaTarget(0.2).restart()
-      })
-      .on("drag", (event) => {
-        const nodeId = event.sourceEvent.target.closest('g')?.id
-        const node = simRef.current?.nodes().find(n => (n as any).id === nodeId)
-        if (node) {
-          (node as any).fx = event.x;
-          (node as any).fy = event.y;
-        }
-      })
-      .on("end", (event) => {
-        if (!event.active) simRef.current?.alphaTarget(0)
-        const nodeId = event.sourceEvent.target.closest('g')?.id
-        const node = simRef.current?.nodes().find(n => (n as any).id === nodeId)
-        if (node) {
-          (node as any).fx = null;
-          (node as any).fy = null;
-        }
-      })
-
-    svg.selectAll<SVGGElement, any>(".node-group").call(drag)
-    return () => { }
-  }, [nodes])
 
   const edges = useMemo(() => {
     const lines: any[] = []
@@ -161,32 +134,63 @@ export function GraphView() {
     setPanStart({ x: e.clientX, y: e.clientY })
   }, [isPanning, panStart, viewBox])
 
+  const activeNodeId = hoveredNode || selectedNodeId
+
   const selectedNode = selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) : null
 
-  const handleIncrementalUpdate = async () => {
-    const activeRepo = getActiveRepo()
-    if (!activeRepo?.repo_url) {
-      toast.error("No repository loaded. Please scan a repo in the Librarian tab first.")
-      return
-    }
-    setIsIncremental(true)
-    setIncrementalResult(null)
-    try {
-      const result = await incrementalUpdate(activeRepo.repo_url)
-      setIncrementalResult(result)
-      if (result.graph_updated) {
-        toast.success(`⚡ Updated ${result.changed_files.length} file(s) in ${result.update_time_seconds}s`)
-        // Trigger a lightweight graph refresh to show the new edges
-        refresh()
-      } else {
-        toast.info("Graph is already up to date — no changes detected.")
+  // Auto-zoom to selected node
+  useEffect(() => {
+    if (selectedNode && selectedNode.x !== undefined && selectedNode.y !== undefined) {
+      // Find bounding box for node + connected edges to properly zoom
+      let minX = selectedNode.x
+      let maxX = selectedNode.x
+      let minY = selectedNode.y
+      let maxY = selectedNode.y
+
+      edges.forEach((edge) => {
+        if (edge.fromId === selectedNode.id || edge.toId === selectedNode.id) {
+          minX = Math.min(minX, edge.x1, edge.x2)
+          maxX = Math.max(maxX, edge.x1, edge.x2)
+          minY = Math.min(minY, edge.y1, edge.y2)
+          maxY = Math.max(maxY, edge.y1, edge.y2)
+        }
+      })
+
+      const padding = 150
+      const targetW = Math.max((maxX - minX) + padding * 2, 800)
+      const targetH = Math.max((maxY - minY) + padding * 2, 600)
+      const targetX = minX - padding
+      const targetY = minY - padding
+
+      // Smooth zoom transition
+      const startX = viewBox.x
+      const startY = viewBox.y
+      const startW = viewBox.w
+      const startH = viewBox.h
+
+      let startTime: number | null = null
+      const duration = 600
+
+      const animateZoom = (timestamp: number) => {
+        if (!startTime) startTime = timestamp
+        const progress = Math.min((timestamp - startTime) / duration, 1)
+        // easeInOutCubic
+        const ease = progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2
+
+        setViewBox({
+          x: startX + (targetX - startX) * ease,
+          y: startY + (targetY - startY) * ease,
+          w: startW + (targetW - startW) * ease,
+          h: startH + (targetH - startH) * ease,
+        })
+
+        if (progress < 1) {
+          requestAnimationFrame(animateZoom)
+        }
       }
-    } catch (e) {
-      toast.error(`Incremental update failed: ${(e as Error).message}`)
-    } finally {
-      setIsIncremental(false)
+      requestAnimationFrame(animateZoom)
     }
-  }
+  }, [selectedNodeId]) // Only re-run when selection changes
 
   const handleGenerateDocs = async () => {
     if (!graphMeta || !rawNodes.length) {
@@ -336,7 +340,7 @@ export function GraphView() {
         onMouseUp={() => setIsPanning(false)}
         onMouseLeave={() => setIsPanning(false)}
         onClick={() => setSelectedNodeId(null)}
-        className={`h-full w-full transition-opacity duration-1000 ${mounted ? "opacity-100" : "opacity-0"} ${isPanning ? "cursor-grabbing" : "cursor-grab"}`}
+        className={`h-full w-full transition-all duration-1000 ease-out transform ${mounted ? "opacity-100 scale-100" : "opacity-0 scale-95"} ${isPanning ? "cursor-grabbing" : "cursor-grab"}`}
       >
         <defs>
           <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
@@ -348,14 +352,16 @@ export function GraphView() {
 
         {/* Edges */}
         {edges.map((edge, i) => {
-          const isHighlighted = hoveredNode === edge.fromId || hoveredNode === edge.toId
+          const isHighlighted = activeNodeId === edge.fromId || activeNodeId === edge.toId
+          const isConnectedToSelected = selectedNodeId === edge.fromId || selectedNodeId === edge.toId
           return (
             <line
               key={i} x1={edge.x1} y1={edge.y1} x2={edge.x2} y2={edge.y2}
               stroke={isHighlighted ? "var(--primary)" : "var(--border)"}
-              strokeWidth={isHighlighted ? 2 : 1}
-              strokeOpacity={isHighlighted ? 0.8 : 0.4}
-              strokeDasharray="4 4" className="animated-edge transition-all duration-300"
+              strokeWidth={isHighlighted ? (isConnectedToSelected ? 3 : 2) : 1}
+              strokeOpacity={isHighlighted ? 0.9 : 0.4}
+              strokeDasharray={isHighlighted ? "none" : "4 4"}
+              className={`${isHighlighted ? 'drop-shadow-[0_0_8px_rgba(88,166,255,0.8)]' : ''} transition-all duration-300`}
             />
           )
         })}
@@ -364,8 +370,20 @@ export function GraphView() {
         {nodes.map((node) => {
           const isHovered = hoveredNode === node.id
           const isSelected = selectedNodeId === node.id
+          const isActive = activeNodeId === node.id
+
+          // Determine if this node is a neighbor of the active node
+          let isNeighbor = false
+          if (activeNodeId) {
+            isNeighbor = edges.some(e =>
+              (e.fromId === activeNodeId && e.toId === node.id) ||
+              (e.toId === activeNodeId && e.fromId === node.id)
+            )
+          }
+
+          const isDimmed = activeNodeId !== null && !isActive && !isNeighbor
           const IconComponent = typeIcons[node.type]
-          const radius = isHovered || isSelected ? 22 : 18
+          const radius = isActive ? 22 : 18
 
           return (
             <g
@@ -375,10 +393,15 @@ export function GraphView() {
               onMouseEnter={() => setHoveredNode(node.id)}
               onMouseLeave={() => setHoveredNode(null)}
               onClick={(e) => { e.stopPropagation(); setSelectedNodeId(node.id); }}
-              className="node-group cursor-pointer group"
+              className={`node-group cursor-pointer group transition-opacity duration-300 ${isDimmed ? 'opacity-20' : 'opacity-100'}`}
             >
-              <circle r={radius} fill={typeColors[node.type]} fillOpacity={isHovered || isSelected ? 0.3 : 0.12} className="transition-all duration-300" />
-              <circle r={radius} stroke={typeColors[node.type]} strokeWidth="1.5" strokeOpacity={isHovered || isSelected ? 1 : 0.4} fill="none" className="transition-all duration-300" />
+              <circle
+                r={radius}
+                fill={typeColors[node.type]}
+                fillOpacity={isActive ? 0.4 : 0.12}
+                className={`transition-all duration-300 ${isActive ? 'drop-shadow-[0_0_15px_rgba(88,166,255,1)]' : ''}`}
+              />
+              <circle r={radius} stroke={typeColors[node.type]} strokeWidth="1.5" strokeOpacity={isActive ? 1 : 0.4} fill="none" className="transition-all duration-300" />
 
               {/* Health status dot */}
               {node.sonar_health && (
@@ -397,92 +420,89 @@ export function GraphView() {
             </g>
           )
         })}
-
-        {/* Info Card Overlay */}
-        {selectedNode && (
-          <foreignObject x={(selectedNode.x ?? 0) + 30} y={(selectedNode.y ?? 0) - 100} width="280" height="340">
-            <div
-              className="flex h-full flex-col rounded-xl border border-border bg-card shadow-2xl overflow-hidden"
-              onWheel={(e) => e.stopPropagation()}
-              onMouseDown={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-start justify-between border-b border-border p-3 bg-muted/30 backdrop-blur-md">
-                <div className="overflow-hidden">
-                  <h3 className="text-xs font-bold text-foreground truncate">{selectedNode.label}</h3>
-                  <p className="font-mono text-[8px] text-muted-foreground truncate opacity-70">{selectedNode.path || `src/${selectedNode.type}s/${selectedNode.label.toLowerCase()}.tsx`}</p>
-                </div>
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  onClick={() => setSelectedNodeId(null)} 
-                  className="h-6 w-6 hover:bg-destructive/10 hover:text-destructive transition-colors"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-              <div className="flex-1 overflow-y-auto p-3 card-scroll space-y-3">
-                {selectedNode.sonar_health && Object.keys(selectedNode.sonar_health).length > 0 ? (
-                  <>
-                    <div className={`flex items-center gap-2 rounded bg-secondary/30 px-2 py-1.5 border ${selectedNode.sonar_health.quality_gate === "PASSED" || selectedNode.sonar_health.quality_gate === "OK" ? "border-success/20 text-success" : "border-destructive/20 text-destructive"
-                      }`}>
-                      {(selectedNode.sonar_health.quality_gate === "PASSED" || selectedNode.sonar_health.quality_gate === "OK") ? (
-                        <ShieldCheck className="h-3.5 w-3.5" />
-                      ) : (
-                        <AlertCircle className="h-3.5 w-3.5" />
-                      )}
-                      <span className="text-[9px] font-bold uppercase tracking-widest">
-                        Quality Gate {selectedNode.sonar_health.quality_gate || "UNKNOWN"}
-                      </span>
-                    </div>
-
-                    {/* Metrics Grid */}
-                    <div className="grid grid-cols-2 gap-2">
-                      {[
-                        { label: "Bugs", val: selectedNode.sonar_health.bugs ?? 0, icon: Bug },
-                        { label: "Smells", val: selectedNode.sonar_health.code_smells ?? 0, icon: Zap },
-                        { label: "Vulner.", val: selectedNode.sonar_health.vulnerabilities ?? 0, icon: ShieldCheck },
-                        { label: "Hotspots", val: selectedNode.sonar_health.security_hotspots ?? 0, icon: Flame },
-                        { label: "Coverage", val: `${(selectedNode.sonar_health.coverage ?? 0).toFixed(1)}%`, icon: Percent },
-                        { label: "Duplicat.", val: `${(selectedNode.sonar_health.duplications ?? 0).toFixed(1)}%`, icon: Copy }
-                      ].map((m, i) => (
-                        <div key={i} className="flex flex-col rounded border border-border bg-secondary/20 p-1.5 min-w-0">
-                          <div className="flex items-center gap-1 text-muted-foreground">
-                            <m.icon className="h-2.5 w-2.5 shrink-0" />
-                            <span className="text-[7px] font-bold uppercase truncate">{m.label}</span>
-                          </div>
-                          <span className="mt-0.5 font-mono text-[10px] font-bold text-foreground truncate">{m.val}</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="space-y-1.5 rounded-lg bg-primary/5 p-2.5 border border-primary/10">
-                      <div className="flex items-center gap-1.5 text-primary">
-                        <MessageSquareQuote className="h-3 w-3" />
-                        <span className="text-[9px] font-bold uppercase">Librarian Insight</span>
-                      </div>
-                      <p className="text-[10px] leading-relaxed text-muted-foreground italic">
-                        {selectedNode.type === "api" ? "Detected as an API endpoint. Ensure proper error handling." :
-                          selectedNode.type === "hook" ? "Custom hook detected. Check for redundant side effects." :
-                            "Architectural node analyzed. Dependency coupling is within safe limits."}
-                      </p>
-                    </div>
-                  </>
-                ) : (
-                  <div className="flex flex-col items-center justify-center p-6 text-center">
-                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground/30 mb-2" />
-                    <p className="text-[10px] text-muted-foreground italic">Fetching insights from Librarian...</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </foreignObject>
-        )}
       </svg>
+
+      {/* Info Card Overlay - Top Right */}
+      {selectedNode && (
+        <div className="absolute right-4 top-[4.5rem] z-30 w-72 animate-in slide-in-from-right-4 fade-in duration-300">
+          <div className="flex h-[380px] flex-col rounded-xl border border-border bg-card/95 shadow-2xl overflow-hidden backdrop-blur-md">
+            <div className="flex items-start justify-between border-b border-border p-3 bg-muted/30 backdrop-blur-md">
+              <div className="overflow-hidden">
+                <h3 className="text-xs font-bold text-foreground truncate">{selectedNode.label}</h3>
+                <p className="font-mono text-[8px] text-muted-foreground truncate opacity-70">{selectedNode.path || `src/${selectedNode.type}s/${selectedNode.label.toLowerCase()}.tsx`}</p>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSelectedNodeId(null)}
+                className="h-6 w-6 hover:bg-destructive/10 hover:text-destructive transition-colors"
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3 card-scroll space-y-3">
+              {selectedNode.sonar_health && Object.keys(selectedNode.sonar_health).length > 0 ? (
+                <>
+                  <div className={`flex items-center gap-2 rounded bg-secondary/30 px-2 py-1.5 border ${selectedNode.sonar_health.quality_gate === "PASSED" || selectedNode.sonar_health.quality_gate === "OK" ? "border-success/20 text-success" : "border-destructive/20 text-destructive"
+                    }`}>
+                    {(selectedNode.sonar_health.quality_gate === "PASSED" || selectedNode.sonar_health.quality_gate === "OK") ? (
+                      <ShieldCheck className="h-3.5 w-3.5" />
+                    ) : (
+                      <AlertCircle className="h-3.5 w-3.5" />
+                    )}
+                    <span className="text-[9px] font-bold uppercase tracking-widest">
+                      Quality Gate {selectedNode.sonar_health.quality_gate || "UNKNOWN"}
+                    </span>
+                  </div>
+
+                  {/* Metrics Grid */}
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { label: "Bugs", val: selectedNode.sonar_health.bugs ?? 0, icon: Bug },
+                      { label: "Smells", val: selectedNode.sonar_health.code_smells ?? 0, icon: Zap },
+                      { label: "Vulner.", val: selectedNode.sonar_health.vulnerabilities ?? 0, icon: ShieldCheck },
+                      { label: "Hotspots", val: selectedNode.sonar_health.security_hotspots ?? 0, icon: Flame },
+                      { label: "Coverage", val: `${(selectedNode.sonar_health.coverage ?? 0).toFixed(1)}%`, icon: Percent },
+                      { label: "Duplicat.", val: `${(selectedNode.sonar_health.duplications ?? 0).toFixed(1)}%`, icon: Copy }
+                    ].map((m, i) => (
+                      <div key={i} className="flex flex-col rounded border border-border bg-secondary/20 p-1.5 min-w-0">
+                        <div className="flex items-center gap-1 text-muted-foreground">
+                          <m.icon className="h-2.5 w-2.5 shrink-0" />
+                          <span className="text-[7px] font-bold uppercase truncate">{m.label}</span>
+                        </div>
+                        <span className="mt-0.5 font-mono text-[10px] font-bold text-foreground truncate">{m.val}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="space-y-1.5 rounded-lg bg-primary/5 p-2.5 border border-primary/10">
+                    <div className="flex items-center gap-1.5 text-primary">
+                      <MessageSquareQuote className="h-3 w-3" />
+                      <span className="text-[9px] font-bold uppercase">Librarian Insight</span>
+                    </div>
+                    <p className="text-[10px] leading-relaxed text-muted-foreground italic">
+                      {selectedNode.type === "api" ? "Detected as an API endpoint. Ensure proper error handling." :
+                        selectedNode.type === "hook" ? "Custom hook detected. Check for redundant side effects." :
+                          "Architectural node analyzed. Dependency coupling is within safe limits."}
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center p-6 text-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground/30 mb-2" />
+                  <p className="text-[10px] text-muted-foreground italic">Fetching insights from Librarian...</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {/* 3. Interaction Hint Overlay (Bottom Left) */}
       <div className="absolute bottom-4 left-4 flex flex-col gap-0.5 pointer-events-none">
         <span className="text-[9px] font-bold text-muted-foreground/60 uppercase tracking-widest">
-          Left Click: Select · Drag: Move
+          Left Click: Select Node
         </span>
         <span className="text-[9px] font-medium text-muted-foreground/40 uppercase tracking-widest">
           Scroll: Zoom · Canvas Drag: Pan
