@@ -1,11 +1,12 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Loader2, AlertCircle } from "lucide-react"
 import { exchangeGithubToken } from "@/lib/api"
 
-export default function OAuthCallbackPage() {
+// Inner component that uses useSearchParams (must be wrapped in Suspense)
+function OAuthCallbackInner() {
     const router = useRouter()
     const searchParams = useSearchParams()
     const [error, setError] = useState<string | null>(null)
@@ -22,14 +23,13 @@ export default function OAuthCallbackPage() {
             try {
                 const { access_token } = await exchangeGithubToken(code)
                 if (access_token) {
-                    // Store securely - localStorage is sufficient for this scope
                     localStorage.setItem("github_token", access_token)
                     router.push("/import-repository?auth=success")
                 } else {
                     setError("GitHub did not return an access token.")
                 }
-            } catch (err: any) {
-                setError(err.message || "Failed to exchange token.")
+            } catch (err: unknown) {
+                setError((err as Error).message || "Failed to exchange token.")
             }
         }
 
@@ -62,5 +62,17 @@ export default function OAuthCallbackPage() {
                 <p className="text-sm text-muted-foreground">Please wait a moment.</p>
             </div>
         </div>
+    )
+}
+
+export default function OAuthCallbackPage() {
+    return (
+        <Suspense fallback={
+            <div className="flex min-h-screen flex-col items-center justify-center bg-background">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        }>
+            <OAuthCallbackInner />
+        </Suspense>
     )
 }
