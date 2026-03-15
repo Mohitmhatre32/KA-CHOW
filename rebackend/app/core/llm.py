@@ -5,6 +5,7 @@ Provides typed helpers so agents don't need to handle Groq internals.
 import json
 import re
 from typing import Any, Dict, Optional
+import time
 from groq import Groq
 from app.core.config import settings
 
@@ -20,19 +21,33 @@ def generate_text(
     temperature: float = 0.4,
 ) -> str:
     """
-    Simple text completion via Groq.
-    Returns the assistant message content as a plain string.
+    Simple text completion via Groq with exponential backoff for rate limits.
     """
-    resp = client.chat.completions.create(
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        model=model or settings.LLM_MODEL,
-        max_tokens=max_tokens,
-        temperature=temperature,
-    )
-    return resp.choices[0].message.content or ""
+    max_retries = 4
+    base_delay = 2.0
+
+    for attempt in range(max_retries):
+        try:
+            resp = client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                model=model or settings.LLM_MODEL,
+                max_tokens=max_tokens,
+                temperature=temperature,
+            )
+            return resp.choices[0].message.content or ""
+        except Exception as e:
+            err_str = str(e)
+            if "429" in err_str or "500" in err_str or "503" in err_str:
+                if attempt < max_retries - 1:
+                    sleep_time = base_delay * (2 ** attempt)
+                    print(f"[LLM] Rate limit or server error ({err_str}). Retrying in {sleep_time}s...")
+                    time.sleep(sleep_time)
+                    continue
+            raise e
+    return ""
 
 
 def generate_json(

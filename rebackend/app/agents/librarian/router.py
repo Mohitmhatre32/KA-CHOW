@@ -5,7 +5,7 @@ import traceback
 from typing import Optional, List
 from fastapi import APIRouter, HTTPException, Query
 
-from .models import ProcessRequest, GraphResponse, CommitInfo
+from .models import ProcessRequest, GraphResponse, CommitInfo, IncrementalUpdateRequest
 from .service import librarian
 
 router = APIRouter()
@@ -66,3 +66,29 @@ async def get_commit_history(
         return librarian.get_commit_history(input_source, max_count=max_count)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/incremental-update", summary="⚡ Incremental Brain — delta re-index only changed files")
+async def incremental_update(request: IncrementalUpdateRequest):
+    """
+    **The Incremental Brain (Task 3).**
+
+    Instead of rescanning the entire project (which is slow), this endpoint:
+    - Runs `git diff --name-only HEAD~1` to find only changed files
+    - Re-chunks and re-embeds only those files into ChromaDB
+    - Hot-swaps the dependency graph edges for the changed nodes
+    - Returns a benchmark comparing update time vs a full-scan estimate
+
+    Use this after committing a small change to keep the AI brain
+    up-to-date in seconds rather than minutes.
+    """
+    try:
+        result = librarian.incremental_update(request.repo_url)
+        return result
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Incremental update failed: {e}")

@@ -120,6 +120,28 @@ export async function getFileContent(filePath: string): Promise<string> {
   return data.content
 }
 
+/** Result from the Incremental Brain update endpoint */
+export interface IncrementalUpdateResult {
+  changed_files: string[]
+  skipped_files: number
+  total_files: number
+  update_time_seconds: number
+  full_scan_baseline_seconds: number
+  graph_updated: boolean
+  message: string
+}
+
+/**
+ * Runs a git-diff-based incremental re-index.
+ * Only processes files that changed since the last commit — much faster than a full scan.
+ * Endpoint: POST /api/librarian/incremental-update
+ */
+export async function incrementalUpdate(repoUrl: string): Promise<IncrementalUpdateResult> {
+  return post<IncrementalUpdateResult>("/api/librarian/incremental-update", {
+    repo_url: repoUrl,
+  })
+}
+
 /**
  * Fetches commit history for a repository.
  * Endpoint: GET /api/librarian/history?input_source=...
@@ -187,7 +209,7 @@ export interface ImpactAnalysisRequest {
 
 export interface ImpactResult {
   severity: "high" | "medium" | "low"
-  affected_services: { name: string; reason: string }[]
+  affected_services: { name: string; reason: string; severity: string }[]
   summary: string
 }
 
@@ -220,7 +242,7 @@ export async function architectAnalyzeImpact(req: ImpactAnalysisRequest): Promis
   const highest = data.impacted_files.find(f => f.severity === "high") || data.impacted_files[0]
   return {
     severity: (highest?.severity as "high" | "medium" | "low") || "low",
-    affected_services: data.impacted_files.map(f => ({ name: f.file_path, reason: f.reason })),
+    affected_services: data.impacted_files.map(f => ({ name: f.file_path, reason: f.reason, severity: f.severity })),
     summary: `${data.total_impacted} files affected at depth ${data.blast_radius_depth}`,
   }
 }

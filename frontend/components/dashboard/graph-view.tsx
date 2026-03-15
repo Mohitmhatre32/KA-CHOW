@@ -10,18 +10,19 @@ import {
   AlertCircle, Loader2, RefreshCcw, Folder, Flame, Copy, Sparkles, type LucideProps,
 } from "lucide-react"
 import { toast } from "sonner"
-import { generateDocs, type DocsResponse } from "@/lib/api"
+import { generateDocs, incrementalUpdate, type DocsResponse, type IncrementalUpdateResult } from "@/lib/api"
+import { getActiveRepo } from "@/lib/repo-store"
 import { Button } from "@/components/ui/button"
 import { DocsModal } from "./docs-modal"
 
 // --- Constants & Labels ---
 const typeColors: Record<GraphNode["type"], string> = {
-  module: "var(--primary)", 
-  component: "var(--success)", 
-  utility: "var(--warning)", 
-  api: "var(--destructive)", 
+  module: "var(--primary)",
+  component: "var(--success)",
+  utility: "var(--warning)",
+  api: "var(--destructive)",
   hook: "var(--accent)",
-  file: "var(--muted-foreground)", 
+  file: "var(--muted-foreground)",
   folder: "var(--border)",
 }
 
@@ -56,6 +57,10 @@ export function GraphView() {
   const [isGeneratingDocs, setIsGeneratingDocs] = useState(false)
   const [generatedDocs, setGeneratedDocs] = useState<DocsResponse | null>(null)
 
+  // Incremental update state
+  const [isIncremental, setIsIncremental] = useState(false)
+  const [incrementalResult, setIncrementalResult] = useState<IncrementalUpdateResult | null>(null)
+
   const { nodes: rawNodes, graphMeta, isLive, isRefreshing, refresh } = useGraphData()
   const [nodes, setNodes] = useState<(GraphNode & d3.SimulationNodeDatum)[]>([])
 
@@ -85,7 +90,7 @@ export function GraphView() {
     // Pre-calculate positions so it starts settled
     simulation.tick(300)
     setNodes(simulationNodes)
-    
+
     // Trigger mount animation after layout is ready
     setTimeout(() => setMounted(true), 50)
 
@@ -277,7 +282,31 @@ export function GraphView() {
               <Sparkles className={`h-2.5 w-2.5 ${isGeneratingDocs ? "animate-pulse" : ""}`} />
               {isGeneratingDocs ? "Generating..." : "Generate Docs"}
             </button>
+
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleIncrementalUpdate();
+              }}
+              disabled={isIncremental}
+              className="flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[10px] border border-amber-500/30 bg-amber-500/10 text-amber-400 transition-all hover:bg-amber-500/20 disabled:opacity-50"
+              title="Re-index only changed files (git diff)"
+            >
+              <Zap className={`h-2.5 w-2.5 ${isIncremental ? "animate-pulse" : ""}`} />
+              {isIncremental ? "Updating..." : "⚡ Incremental"}
+            </button>
           </div>
+          {/* Benchmark result pill */}
+          {incrementalResult && (
+            <div className="mt-1 flex items-center gap-1.5 rounded bg-amber-500/10 border border-amber-500/20 px-2 py-0.5">
+              <Zap className="h-2.5 w-2.5 text-amber-400" />
+              <span className="font-mono text-[9px] text-amber-400">
+                {incrementalResult.graph_updated
+                  ? `Updated ${incrementalResult.changed_files.length} file(s) in ${incrementalResult.update_time_seconds}s · Baseline ~${incrementalResult.full_scan_baseline_seconds}s`
+                  : "Already up to date"}
+              </span>
+            </div>
+          )}
         </div>
       )}
 
@@ -342,12 +371,12 @@ export function GraphView() {
           const isHovered = hoveredNode === node.id
           const isSelected = selectedNodeId === node.id
           const isActive = activeNodeId === node.id
-          
+
           // Determine if this node is a neighbor of the active node
           let isNeighbor = false
           if (activeNodeId) {
-            isNeighbor = edges.some(e => 
-              (e.fromId === activeNodeId && e.toId === node.id) || 
+            isNeighbor = edges.some(e =>
+              (e.fromId === activeNodeId && e.toId === node.id) ||
               (e.toId === activeNodeId && e.fromId === node.id)
             )
           }
@@ -366,10 +395,10 @@ export function GraphView() {
               onClick={(e) => { e.stopPropagation(); setSelectedNodeId(node.id); }}
               className={`node-group cursor-pointer group transition-opacity duration-300 ${isDimmed ? 'opacity-20' : 'opacity-100'}`}
             >
-              <circle 
-                r={radius} 
-                fill={typeColors[node.type]} 
-                fillOpacity={isActive ? 0.4 : 0.12} 
+              <circle
+                r={radius}
+                fill={typeColors[node.type]}
+                fillOpacity={isActive ? 0.4 : 0.12}
                 className={`transition-all duration-300 ${isActive ? 'drop-shadow-[0_0_15px_rgba(88,166,255,1)]' : ''}`}
               />
               <circle r={radius} stroke={typeColors[node.type]} strokeWidth="1.5" strokeOpacity={isActive ? 1 : 0.4} fill="none" className="transition-all duration-300" />
@@ -397,76 +426,76 @@ export function GraphView() {
       {selectedNode && (
         <div className="absolute right-4 top-[4.5rem] z-30 w-72 animate-in slide-in-from-right-4 fade-in duration-300">
           <div className="flex h-[380px] flex-col rounded-xl border border-border bg-card/95 shadow-2xl overflow-hidden backdrop-blur-md">
-              <div className="flex items-start justify-between border-b border-border p-3 bg-muted/30 backdrop-blur-md">
-                <div className="overflow-hidden">
-                  <h3 className="text-xs font-bold text-foreground truncate">{selectedNode.label}</h3>
-                  <p className="font-mono text-[8px] text-muted-foreground truncate opacity-70">{selectedNode.path || `src/${selectedNode.type}s/${selectedNode.label.toLowerCase()}.tsx`}</p>
-                </div>
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  onClick={() => setSelectedNodeId(null)} 
-                  className="h-6 w-6 hover:bg-destructive/10 hover:text-destructive transition-colors"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </Button>
+            <div className="flex items-start justify-between border-b border-border p-3 bg-muted/30 backdrop-blur-md">
+              <div className="overflow-hidden">
+                <h3 className="text-xs font-bold text-foreground truncate">{selectedNode.label}</h3>
+                <p className="font-mono text-[8px] text-muted-foreground truncate opacity-70">{selectedNode.path || `src/${selectedNode.type}s/${selectedNode.label.toLowerCase()}.tsx`}</p>
               </div>
-              <div className="flex-1 overflow-y-auto p-3 card-scroll space-y-3">
-                {selectedNode.sonar_health && Object.keys(selectedNode.sonar_health).length > 0 ? (
-                  <>
-                    <div className={`flex items-center gap-2 rounded bg-secondary/30 px-2 py-1.5 border ${selectedNode.sonar_health.quality_gate === "PASSED" || selectedNode.sonar_health.quality_gate === "OK" ? "border-success/20 text-success" : "border-destructive/20 text-destructive"
-                      }`}>
-                      {(selectedNode.sonar_health.quality_gate === "PASSED" || selectedNode.sonar_health.quality_gate === "OK") ? (
-                        <ShieldCheck className="h-3.5 w-3.5" />
-                      ) : (
-                        <AlertCircle className="h-3.5 w-3.5" />
-                      )}
-                      <span className="text-[9px] font-bold uppercase tracking-widest">
-                        Quality Gate {selectedNode.sonar_health.quality_gate || "UNKNOWN"}
-                      </span>
-                    </div>
-
-                    {/* Metrics Grid */}
-                    <div className="grid grid-cols-2 gap-2">
-                      {[
-                        { label: "Bugs", val: selectedNode.sonar_health.bugs ?? 0, icon: Bug },
-                        { label: "Smells", val: selectedNode.sonar_health.code_smells ?? 0, icon: Zap },
-                        { label: "Vulner.", val: selectedNode.sonar_health.vulnerabilities ?? 0, icon: ShieldCheck },
-                        { label: "Hotspots", val: selectedNode.sonar_health.security_hotspots ?? 0, icon: Flame },
-                        { label: "Coverage", val: `${(selectedNode.sonar_health.coverage ?? 0).toFixed(1)}%`, icon: Percent },
-                        { label: "Duplicat.", val: `${(selectedNode.sonar_health.duplications ?? 0).toFixed(1)}%`, icon: Copy }
-                      ].map((m, i) => (
-                        <div key={i} className="flex flex-col rounded border border-border bg-secondary/20 p-1.5 min-w-0">
-                          <div className="flex items-center gap-1 text-muted-foreground">
-                            <m.icon className="h-2.5 w-2.5 shrink-0" />
-                            <span className="text-[7px] font-bold uppercase truncate">{m.label}</span>
-                          </div>
-                          <span className="mt-0.5 font-mono text-[10px] font-bold text-foreground truncate">{m.val}</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="space-y-1.5 rounded-lg bg-primary/5 p-2.5 border border-primary/10">
-                      <div className="flex items-center gap-1.5 text-primary">
-                        <MessageSquareQuote className="h-3 w-3" />
-                        <span className="text-[9px] font-bold uppercase">Librarian Insight</span>
-                      </div>
-                      <p className="text-[10px] leading-relaxed text-muted-foreground italic">
-                        {selectedNode.type === "api" ? "Detected as an API endpoint. Ensure proper error handling." :
-                          selectedNode.type === "hook" ? "Custom hook detected. Check for redundant side effects." :
-                            "Architectural node analyzed. Dependency coupling is within safe limits."}
-                      </p>
-                    </div>
-                  </>
-                ) : (
-                  <div className="flex flex-col items-center justify-center p-6 text-center">
-                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground/30 mb-2" />
-                    <p className="text-[10px] text-muted-foreground italic">Fetching insights from Librarian...</p>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSelectedNodeId(null)}
+                className="h-6 w-6 hover:bg-destructive/10 hover:text-destructive transition-colors"
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3 card-scroll space-y-3">
+              {selectedNode.sonar_health && Object.keys(selectedNode.sonar_health).length > 0 ? (
+                <>
+                  <div className={`flex items-center gap-2 rounded bg-secondary/30 px-2 py-1.5 border ${selectedNode.sonar_health.quality_gate === "PASSED" || selectedNode.sonar_health.quality_gate === "OK" ? "border-success/20 text-success" : "border-destructive/20 text-destructive"
+                    }`}>
+                    {(selectedNode.sonar_health.quality_gate === "PASSED" || selectedNode.sonar_health.quality_gate === "OK") ? (
+                      <ShieldCheck className="h-3.5 w-3.5" />
+                    ) : (
+                      <AlertCircle className="h-3.5 w-3.5" />
+                    )}
+                    <span className="text-[9px] font-bold uppercase tracking-widest">
+                      Quality Gate {selectedNode.sonar_health.quality_gate || "UNKNOWN"}
+                    </span>
                   </div>
-                )}
-              </div>
+
+                  {/* Metrics Grid */}
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { label: "Bugs", val: selectedNode.sonar_health.bugs ?? 0, icon: Bug },
+                      { label: "Smells", val: selectedNode.sonar_health.code_smells ?? 0, icon: Zap },
+                      { label: "Vulner.", val: selectedNode.sonar_health.vulnerabilities ?? 0, icon: ShieldCheck },
+                      { label: "Hotspots", val: selectedNode.sonar_health.security_hotspots ?? 0, icon: Flame },
+                      { label: "Coverage", val: `${(selectedNode.sonar_health.coverage ?? 0).toFixed(1)}%`, icon: Percent },
+                      { label: "Duplicat.", val: `${(selectedNode.sonar_health.duplications ?? 0).toFixed(1)}%`, icon: Copy }
+                    ].map((m, i) => (
+                      <div key={i} className="flex flex-col rounded border border-border bg-secondary/20 p-1.5 min-w-0">
+                        <div className="flex items-center gap-1 text-muted-foreground">
+                          <m.icon className="h-2.5 w-2.5 shrink-0" />
+                          <span className="text-[7px] font-bold uppercase truncate">{m.label}</span>
+                        </div>
+                        <span className="mt-0.5 font-mono text-[10px] font-bold text-foreground truncate">{m.val}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="space-y-1.5 rounded-lg bg-primary/5 p-2.5 border border-primary/10">
+                    <div className="flex items-center gap-1.5 text-primary">
+                      <MessageSquareQuote className="h-3 w-3" />
+                      <span className="text-[9px] font-bold uppercase">Librarian Insight</span>
+                    </div>
+                    <p className="text-[10px] leading-relaxed text-muted-foreground italic">
+                      {selectedNode.type === "api" ? "Detected as an API endpoint. Ensure proper error handling." :
+                        selectedNode.type === "hook" ? "Custom hook detected. Check for redundant side effects." :
+                          "Architectural node analyzed. Dependency coupling is within safe limits."}
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center p-6 text-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground/30 mb-2" />
+                  <p className="text-[10px] text-muted-foreground italic">Fetching insights from Librarian...</p>
+                </div>
+              )}
             </div>
           </div>
+        </div>
       )}
 
 

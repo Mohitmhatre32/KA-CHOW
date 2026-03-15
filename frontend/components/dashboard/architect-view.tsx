@@ -242,7 +242,6 @@ export function ArchitectView() {
     const [isContentLoading, setIsContentLoading] = useState(false)
 
     // ── Impact analyzer state ──
-    const [targetEndpoint, setTargetEndpoint] = useState("")
     const [proposedChange, setProposedChange] = useState("")
     const [impactLoading, setImpactLoading] = useState(false)
     const [impactResult, setImpactResult] = useState<ImpactResult | null>(null)
@@ -331,7 +330,7 @@ export function ArchitectView() {
         setError(null)
         try {
             const result = await architectAnalyzeImpact({
-                target_endpoint: targetEndpoint,
+                target_endpoint: "root", // Passed statically as root so backend handles it globally
                 proposed_change: proposedChange,
                 repo_url: activeRepo.repo_url,
             })
@@ -341,7 +340,7 @@ export function ArchitectView() {
         } finally {
             setImpactLoading(false)
         }
-    }, [targetEndpoint, proposedChange])
+    }, [proposedChange])
 
     // ── File select handler ──
     const handleFileSelect = useCallback(async (node: TreeNode) => {
@@ -603,41 +602,62 @@ export function ArchitectView() {
                     <div
                         className="rounded-xl border border-border p-5 bg-card/30 backdrop-blur-sm"
                     >
+                        {/* ── What-If Analyzer Explainer ── */}
+                        <div className="mb-5 rounded-xl border border-primary/20 bg-primary/5 p-4">
+                            <div className="flex items-start gap-3">
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-primary/30 bg-primary/10">
+                                    <Monitor className="h-4 w-4 text-primary" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <p className="font-mono text-xs font-bold uppercase tracking-wider text-primary">
+                                            What is the What-If Analyzer?
+                                        </p>
+                                        <span className="rounded-full border border-rose-500/30 bg-rose-500/8 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-widest text-rose-400">
+                                            Blast Radius Engine
+                                        </span>
+                                    </div>
+                                    <p className="font-mono text-[11px] leading-relaxed text-muted-foreground">
+                                        The <span className="text-primary font-semibold">What-If Analyzer</span> is an AI-powered dependency intelligence tool. When you describe a proposed code change, it crawls the project&apos;s live knowledge graph to identify every file, service, or module that will be affected — giving each a <span className="text-rose-400 font-semibold">HIGH</span> / <span className="text-amber-400 font-semibold">MEDIUM</span> / <span className="text-emerald-400 font-semibold">LOW</span> blast-radius severity score.
+                                    </p>
+                                    <div className="mt-3 grid grid-cols-3 gap-2">
+                                        {[
+                                            { step: "01", label: "Crawls Graph", desc: "Scans all import / dependency edges" },
+                                            { step: "02", label: "Traces Impact", desc: "Finds all files that import the target" },
+                                            { step: "03", label: "AI Reasoning", desc: "LLM assigns severity + explanation" },
+                                        ].map(({ step, label, desc }) => (
+                                            <div key={step} className="rounded-lg border border-border bg-card/60 p-2.5">
+                                                <p className="font-mono text-[9px] font-bold text-primary/50 mb-0.5">STEP {step}</p>
+                                                <p className="font-mono text-[10px] font-bold text-foreground">{label}</p>
+                                                <p className="font-mono text-[9px] text-muted-foreground opacity-70 leading-snug">{desc}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         {/* Controls row */}
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                            {/* Target Endpoint */}
+                            {/* Proposed Change Scenario */}
                             <div className="flex-1">
                                 <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-wider text-zinc-600">
-                                    Target Endpoint / File
-                                </label>
-                                <input
-                                    type="text"
-                                    value={targetEndpoint}
-                                    onChange={(e) => setTargetEndpoint(e.target.value)}
-                                    placeholder="e.g. /api/v1/getUser or auth.py"
-                                    className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5 font-mono text-xs text-cyan-300 outline-none transition-colors focus:border-cyan-500/40"
-                                />
-                            </div>
-
-                            {/* Proposed Change */}
-                            <div className="flex-1">
-                                <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-wider text-zinc-600">
-                                    Proposed Change
+                                    What if scenario
                                 </label>
                                 <input
                                     type="text"
                                     value={proposedChange}
                                     onChange={(e) => setProposedChange(e.target.value)}
                                     className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5 font-mono text-xs text-zinc-300 outline-none transition-colors focus:border-cyan-500/40"
-                                    placeholder="e.g. Change User ID from Integer to String"
+                                    placeholder="e.g. What if I change the datatype from int to string?"
                                 />
                             </div>
 
                             {/* Analyze button */}
                             <Button
                                 onClick={handleAnalyzeImpact}
-                                disabled={impactLoading || !targetEndpoint.trim() || !proposedChange.trim()}
-                                className={`h-10 gap-2 font-mono text-xs font-bold transition-all ${impactLoading || !targetEndpoint.trim() || !proposedChange.trim() ? "opacity-50" : "border-destructive/40 bg-destructive/5 text-destructive hover:bg-destructive/10"}`}
+                                disabled={impactLoading || !proposedChange.trim()}
+                                className={`h-10 gap-2 font-mono text-xs font-bold transition-all ${impactLoading || !proposedChange.trim() ? "opacity-50" : "border-destructive/40 bg-destructive/5 text-destructive hover:bg-destructive/10"}`}
                                 variant="outline"
                             >
                                 {impactLoading ? (
@@ -671,21 +691,26 @@ export function ArchitectView() {
                                 </div>
 
                                 {/* Blast radius list */}
-                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                                    {impactResult.affected_services.map((svc, i) => (
-                                        <div
-                                            key={i}
-                                            className="rounded-lg border border-destructive/15 bg-destructive/5 p-3"
-                                        >
-                                            <div className="flex items-center gap-2">
-                                                <XCircle className="h-3.5 w-3.5 text-destructive" />
-                                                <span className="font-mono text-[10px] font-bold uppercase tracking-tight text-destructive truncate">{svc.name}</span>
+                                <div className="mt-4">
+                                    <p className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest mb-3">IMPACTED FILES</p>
+                                    <div className="flex flex-col gap-3">
+                                        {impactResult.affected_services.map((svc, i) => (
+                                            <div
+                                                key={i}
+                                                className="rounded-lg border border-zinc-800/80 bg-[#161b22] p-4 shadow-sm"
+                                            >
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <span className="font-mono text-sm font-semibold tracking-tight text-zinc-200">{svc.name}</span>
+                                                    <span className={`font-mono text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-sm ${svc.severity === "high" ? "text-rose-500 bg-rose-500/10" : svc.severity === "medium" ? "text-amber-500 bg-amber-500/10" : "text-emerald-500 bg-emerald-500/10"}`}>
+                                                        {svc.severity}
+                                                    </span>
+                                                </div>
+                                                <p className="font-sans text-[13px] leading-relaxed text-zinc-400">
+                                                    {svc.reason}
+                                                </p>
                                             </div>
-                                            <p className="mt-1.5 font-mono text-[10px] leading-relaxed text-muted-foreground opacity-70">
-                                                {svc.reason}
-                                            </p>
-                                        </div>
-                                    ))}
+                                        ))}
+                                    </div>
                                 </div>
 
                                 {/* Export to Jira */}

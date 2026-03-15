@@ -117,45 +117,78 @@ STRICT: No conversational text. Escape all newlines as '\\n'.
             with open(graph_path, "r") as f:
                 graph_data = json.load(f)
             
-            impacted = set()
-            depth = 0
-            
-            # Transitive dependency lookup
-            queue = [target_file]
-            visited = {target_file}
-            
-            while queue:
-                current = queue.pop(0)
-                found_in_level = False
-                for edge in graph_data.get("edges", []):
-                    if edge["target"] == current and edge["source"] not in visited:
-                        impacted.add(edge["source"])
-                        visited.add(edge["source"])
-                        queue.append(edge["source"])
-                        found_in_level = True
-                if found_in_level:
-                    depth += 1
-
-            # Enrich with logic-based reasoning from LLM
             impact_nodes = []
-            for path in impacted:
-                reasoning_prompt = f"""
+            depth = 0
+
+            if target_file and target_file not in ["root", "global", ""]:
+                # Transitive dependency lookup based on specific file
+                impacted = set()
+                queue = [target_file]
+                visited = {target_file}
+                
+                while queue:
+                    current = queue.pop(0)
+                    found_in_level = False
+                    for edge in graph_data.get("edges", []):
+                        if edge["target"] == current and edge["source"] not in visited:
+                            impacted.add(edge["source"])
+                            visited.add(edge["source"])
+                            queue.append(edge["source"])
+                            found_in_level = True
+                    if found_in_level:
+                        depth += 1
+
+                # Enrich with logic-based reasoning from LLM
+                for path in impacted:
+                    reasoning_prompt = f"""
+                    ROLE: Senior System Analyzer.
+                    CONTEXT: Proposed change "{proposed_change}" to file "{target_file}".
+                    TARGET: Analyzing impact on dependent file "{path}".
+                    
+                    TASK: Identify why this dependent file is affected and assign severity.
+                    
+                    RETURN ONLY JSON:
+                    {{ "severity": "high/medium/low", "reason": "logic-based explanation" }}
+                    """
+                    analysis = generate_json(reasoning_prompt, "You are a professional software architect.")
+                    
+                    impact_nodes.append(ImpactNode(
+                        file_path=path,
+                        severity=analysis.get("severity", "medium"),
+                        reason=analysis.get("reason", "Direct dependency detected in knowledge graph.")
+                    ))
+            else:
+                # Global Scenario Analysis (target_file is 'root' or empty)
+                all_nodes = [node["id"] for node in graph_data.get("nodes", [])]
+                all_nodes_str = "\\n".join(all_nodes[:50]) # cap at 50 for token limits
+                
+                global_prompt = f"""
                 ROLE: Senior System Analyzer.
-                CONTEXT: Proposed change "{proposed_change}" to file "{target_file}".
-                TARGET: Analyzing impact on dependent file "{path}".
+                CONTEXT: The user proposed a global architectural scenario / change: "{proposed_change}".
                 
-                TASK: Identify why this dependent file is affected and assign severity.
+                PROJECT FILES (Sample subset):
+                {all_nodes_str}
                 
-                RETURN ONLY JSON:
-                {{ "severity": "high/medium/low", "reason": "logic-based explanation" }}
+                TASK: Identify exactly which components or files (up to 3 most critical ones) would be significantly impacted by this global change and explain why in a detailed and concise manner.
+                
+                RETURN ONLY JSON IN EXACT FORMAT:
+                {{
+                    "impacted_files": [
+                        {{ "file_path": "filename_or_component", "severity": "high/medium/low", "reason": "Detailed logic-based explanation." }}
+                    ]
+                }}
                 """
-                analysis = generate_json(reasoning_prompt, "You are a professional software architect.")
+                analysis = generate_json(global_prompt, "You are a professional software architect.")
+                impact_list = analysis.get("impacted_files", [])
                 
-                impact_nodes.append(ImpactNode(
-                    file_path=path,
-                    severity=analysis.get("severity", "medium"),
-                    reason=analysis.get("reason", "Direct dependency detected in knowledge graph.")
-                ))
+                for item in impact_list:
+                    impact_nodes.append(ImpactNode(
+                        file_path=item.get("file_path", "root"),
+                        severity=item.get("severity", "high"),
+                        reason=item.get("reason", "Global architectural impact identified.")
+                    ))
+                
+                depth = 1 # Global changes affect the first structural layer intrinsically
 
             return ImpactResponse(
                 impacted_files=impact_nodes,
