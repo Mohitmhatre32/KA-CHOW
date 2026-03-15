@@ -10,7 +10,6 @@
 [![SonarQube](https://img.shields.io/badge/SonarQube-4E9BCD?style=flat&logo=sonarqube&logoColor=white)](https://www.sonarqube.org/)
 
 ---
-
 ## 🛑 The Problem: The "Enterprise Memory Gap"
 In modern software development, system knowledge is completely fragmented. Jira holds the *plan*, but the code holds the *reality*. Because these silos don't connect, enterprises suffer from:
 *   **Stale Documentation:** Wikis become "lies" the moment new code is pushed.
