@@ -365,6 +365,7 @@
     <div class="tabs">
       <div class="tab active" onclick="switchTab(event,'stats')">📊 Stats</div>
       <div class="tab" onclick="switchTab(event,'commits')">📜 Commits</div>
+      <div class="tab" onclick="switchTab(event,'architect')">🏗️ Architect</div>
     </div>
 
     <div class="tab-content active" id="tab-stats">
@@ -394,12 +395,48 @@
       </div>
     </div>
 
-    <div class="tab-content" id="tab-commits">
+    <div class="tab-content" id="tab-architect">
       <div class="panel-body">
-        <div id="commits-empty" class="empty-state" style="height:auto;padding:40px 0;">
-          <div class="big-icon">📜</div><p>Load a repo to see commit history</p>
+        <h3 style="font-size:.85rem; margin-bottom:12px; color:var(--accent)">🏗️ Project Architect</h3>
+        
+        <!-- Jira Sync -->
+        <div style="background:rgba(88,166,255,.05); border:1px solid var(--border); border-radius:8px; padding:12px; margin-bottom:16px;">
+          <label style="font-size:.65rem; color:var(--muted); display:block; margin-bottom:6px;">JIRA INTEGRATION</label>
+          <div style="display:flex; gap:8px;">
+            <input id="jira-key" type="text" placeholder="TICKET-123" style="flex:1; font-size:.7rem; padding:6px; background:var(--card); border:1px solid var(--border); border-radius:4px; color:var(--text);">
+            <button class="btn btn-ghost" style="padding:4px 10px; font-size:.68rem;" onclick="syncJira()">Sync</button>
+          </div>
+          <div id="jira-info" style="margin-top:8px; font-size:.72rem; color:var(--accent2); display:none;"></div>
         </div>
-        <div id="commits-list"></div>
+
+        <!-- Scaffolding -->
+        <div style="margin-bottom:20px;">
+          <label style="font-size:.7rem; color:var(--muted); display:block; margin-bottom:6px;">SCAFFOLD NEW PROJECT</label>
+          <textarea id="build-reqs" placeholder="Describe your architecture requirements..." style="width:100%; height:80px; background:var(--card); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:.75rem; padding:10px; resize:none; margin-bottom:8px;"></textarea>
+          <button class="btn btn-primary" style="width:100%; font-size:.75rem;" onclick="runBuild()">🚀 Scaffold Structure</button>
+        </div>
+
+        <hr style="border:0; border-top:1px solid var(--border); margin:20px 0;">
+
+        <!-- Impact Analysis -->
+        <div>
+          <label style="font-size:.7rem; color:var(--muted); display:block; margin-bottom:6px;">BLAST RADIUS (IMPACT ANALYSIS)</label>
+          <div style="font-size:.7rem; color:var(--muted); margin-bottom:10px; border-left:2px solid var(--accent); padding-left:8px;">
+            Target: <span id="impact-target" style="color:var(--text)">None selected</span>
+          </div>
+          <textarea id="change-desc" placeholder="What is the proposed change?" style="width:100%; height:60px; background:var(--card); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:.75rem; padding:10px; resize:none; margin-bottom:8px;"></textarea>
+          <button class="btn btn-ghost" style="width:100%; font-size:.75rem; border-color:var(--accent3); color:var(--accent3);" onclick="runImpact()">🔍 Analyze Impact</button>
+        </div>
+
+        <!-- Impact Results -->
+        <div id="impact-results" style="margin-top:16px; display:none;">
+           <div style="font-size:.65rem; color:var(--muted); margin-bottom:8px; display:flex; justify-content:space-between;">
+             <span>IMPACTED FILES</span>
+             <span id="impact-count" style="color:var(--danger)">0</span>
+           </div>
+           <div id="impact-list"></div>
+           <button class="btn btn-primary" id="btn-jira-tasks" style="width:100%; margin-top:12px; font-size:.7rem; background:#0052cc; color:#fff;" onclick="createJiraTasks()" disabled>➕ Export to Jira Sub-tasks</button>
+        </div>
       </div>
     </div>
   </div>
@@ -688,6 +725,7 @@ async function loadFilePreview(relPath, projectRoot, el) {
   const fullPath = (projectRoot || '').replace(/\\/g, '/').replace(/\/$/, '') + '/' + relPath;
   currentFilePath = fullPath;
   document.getElementById('preview-path').textContent = relPath;
+  document.getElementById('impact-target').textContent = relPath;
   
   // Reset Guardian UI
   document.getElementById('btn-review').style.display = 'block';
@@ -1008,6 +1046,100 @@ async function saveFile() {
     fetchAlerts(); // force alert refresh
   } catch(e) { alert('Save Error: ' + e.message); }
   btn.innerHTML = orgText; btn.disabled = false;
+}
+
+// ── Architect UI ──────────────────────────
+let currentImpactResults = [];
+
+async function syncJira() {
+  const key = document.getElementById('jira-key').value.trim();
+  if (!key) return;
+  const info = document.getElementById('jira-info');
+  info.style.display = 'block'; info.textContent = '⏳ Fetching...';
+  
+  try {
+    const res = await fetch(API + '/api/architect/jira/ticket/' + key);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to fetch Jira');
+    info.innerHTML = `✅ <strong>${data.summary}</strong> [${data.status}]`;
+  } catch(e) { info.textContent = '❌ ' + e.message; }
+}
+
+async function runBuild() {
+  const reqs = document.getElementById('build-reqs').value.trim();
+  if (!reqs) return alert('Enter requirements first');
+  
+  try {
+    const res = await fetch(API + '/api/architect/build', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({requirements: reqs, project_name: "ai_gen"})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Build failed');
+    
+    alert('Scaffold Complete! Auto-loading project...');
+    document.getElementById('repo-input').value = data.project_root;
+    loadRepo();
+  } catch(e) { alert('Build Error: ' + e.message); }
+}
+
+async function runImpact() {
+  if (!currentFilePath || !currentGraph) return alert('Load a project and select a file first');
+  const relPath = document.getElementById('preview-path').textContent;
+  const change = document.getElementById('change-desc').value.trim();
+  if (!change) return alert('Describe the change first');
+
+  const resWrap = document.getElementById('impact-results');
+  const list = document.getElementById('impact-list');
+  resWrap.style.display = 'block';
+  list.innerHTML = '⏳ Analyzing blast radius...';
+
+  try {
+    const res = await fetch(API + '/api/architect/impact', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        project_name: currentGraph.project_name,
+        target_file: relPath,
+        proposed_change: change
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Impact analysis failed');
+
+    currentImpactResults = data.impacted_files;
+    document.getElementById('impact-count').textContent = data.total_impacted;
+    
+    list.innerHTML = data.impacted_files.map(f => `
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:8px; margin-bottom:6px; font-size:.68rem;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+           <span style="font-family:monospace; color:var(--text);">${f.file_path}</span>
+           <span style="color:${f.severity === 'high' ? 'var(--danger)' : f.severity === 'medium' ? 'var(--accent3)' : 'var(--accent2)'}; font-weight:700; text-transform:uppercase; font-size:.6rem;">${f.severity}</span>
+        </div>
+        <div style="color:var(--muted); line-height:1.3;">${f.reason}</div>
+      </div>
+    `).join('');
+    
+    document.getElementById('btn-jira-tasks').disabled = data.total_impacted === 0;
+  } catch(e) { list.innerHTML = `<span style="color:var(--danger)">Error: ${e.message}</span>`; }
+}
+
+async function createJiraTasks() {
+  const parentKey = document.getElementById('jira-key').value.trim();
+  if (!parentKey) return alert('Enter a parent Jira Ticket Key first');
+  
+  const tasks = currentImpactResults.map(f => `Fix/Verify impact in ${f.file_path} [Severity: ${f.severity}]`);
+  
+  try {
+    const res = await fetch(API + '/api/architect/jira/tasks', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({parent_key: parentKey, tasks: tasks})
+    });
+    const data = await res.json();
+    alert(data.message);
+  } catch(e) { alert('Jira Error: ' + e.message); }
 }
 
 // Auto-poll alerts
