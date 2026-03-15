@@ -281,16 +281,28 @@ export function GuardianView() {
     const [repoName, setRepoName] = useState<string>("")
     const [projectRoot, setProjectRoot] = useState<string>("")
 
-    // ── Load repo nodes from store on mount ───────────────────────────────────
-    useEffect(() => {
+    // ── Load repo nodes from store on mount + listen for changes ─────────────
+    const refreshFromStore = useCallback(() => {
         const repo = getActiveRepo()
         if (repo?.data?.nodes?.length) {
             setRepoNodes(repo.data.nodes)
             setRepoName(repo.repo_name)
-            // project_root is the absolute path on disk to the cloned/local repo
             setProjectRoot(repo.data.project_root ?? "")
+            // Reset local file selection when repo changes
+            setSelectedFilePath("")
+            setActiveCode("")
+            setActiveFileName("")
+            setViewState("idle")
+            setReviewResult(null)
+            setHealedCode(null)
         }
     }, [])
+
+    useEffect(() => {
+        refreshFromStore()
+        window.addEventListener("active-repo-changed", refreshFromStore)
+        return () => window.removeEventListener("active-repo-changed", refreshFromStore)
+    }, [refreshFromStore])
 
     // ── Load selected file content ────────────────────────────────────────────
     const handleLoadFile = useCallback(async () => {
@@ -305,10 +317,12 @@ export function GuardianView() {
 
         try {
             // Node IDs are relative paths; join with project_root for the absolute path
-            const separator = projectRoot.includes("\\") ? "\\" : "/"
-            const absolutePath = projectRoot
-                ? `${projectRoot}${separator}${selectedFilePath.replace(/\//g, separator)}`
-                : selectedFilePath
+            // Normalize slashes for consistency
+            const normalizedRoot = projectRoot.replace(/\\/g, "/")
+            const normalizedRelPath = selectedFilePath.replace(/\\/g, "/")
+            const separator = normalizedRoot.endsWith("/") ? "" : "/"
+            
+            const absolutePath = `${normalizedRoot}${separator}${normalizedRelPath}`
 
             const content = await getFileContent(absolutePath)
 
@@ -318,7 +332,7 @@ export function GuardianView() {
             }
 
             setActiveCode(content)
-            setActiveFileName(selectedFilePath.split("/").pop() || selectedFilePath)
+            setActiveFileName(normalizedRelPath.split("/").pop() || normalizedRelPath)
             setFileLoadingState("loaded")
         } catch (e) {
             setError(`Could not load file: ${(e as Error).message}`)
@@ -338,20 +352,9 @@ export function GuardianView() {
             setReviewResult(result)
             setViewState("reviewed")
         } catch (e: unknown) {
-            const msg = e instanceof Error ? e.message : "Backend unavailable — showing demo data."
-            setError(msg)
-            setReviewResult({
-                status: "BLOCKED",
-                issues_found: [
-                    "Missing docstrings on all functions and class",
-                    "Unused import: requests (line 4)",
-                    "Non-descriptive variable names (x, y)",
-                    "Hardcoded HTTP URL (non-HTTPS) in authenticate()",
-                    "SQL injection vulnerability in get_user()",
-                ],
-                message: "❌ MERGE BLOCKED: Quality Gate Failed. Please fix the technical debt.",
-            })
-            setViewState("reviewed")
+            const msg = e instanceof Error ? e.message : "Backend unavailable."
+            setError(`Review failed: ${msg}`)
+            setViewState("idle") // Don't show demo data by default if real backend fails
         }
     }, [activeCode, activeFileName])
 
@@ -371,10 +374,8 @@ export function GuardianView() {
             setViewState("healed")
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : "Backend unavailable."
-            setError(msg)
-            setHealedCode(activeCode + "\n# Auto-heal failed — backend unavailable.")
-            setHealMessage("⚠️ Heal failed — demo fallback shown.")
-            setViewState("healed")
+            setError(`Heal failed: ${msg}`)
+            setViewState("reviewed")
         }
     }, [reviewResult, activeCode, activeFileName])
 

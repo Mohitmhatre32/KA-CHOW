@@ -39,20 +39,21 @@ Return ONLY your explanation and the code block.
 """
 
     def review_code(self, file_name: str, code_content: str) -> PRReviewResponse:
+        print(f"[Guardian:Review] Analyzing {file_name}...")
         user_prompt = f"File: {file_name}\n\nCode:\n```\n{code_content}\n```"
         try:
             result = generate_json(user_prompt, self.review_prompt)
-            # Default to passing if the LLM output is somehow malformed but unraised
             passed = result.get("passed", True)
             issues = result.get("issues", [])
             message = result.get("message", "Review completed.")
             
-            # Sanity check: if there are issues, it shouldn't mathematically pass
             if issues and passed:
                 passed = False
                 
+            print(f"[Guardian:Review] Result: {'PASSED' if passed else 'BLOCKED'} ({len(issues)} issues)")
             return PRReviewResponse(passed=passed, issues=issues, message=message)
         except Exception as e:
+            print(f"[Guardian:Review] Error: {e}")
             alert_system.add_alert(
                 title="Guardian Review Failed",
                 message=str(e),
@@ -61,26 +62,27 @@ Return ONLY your explanation and the code block.
             raise ValueError(f"Failed to generate review: {e}")
 
     def heal_code(self, file_name: str, code_content: str, issues: list[str]) -> AutoHealResponse:
+        print(f"[Guardian:Heal] Attempting to fix {file_name}...")
         issues_text = "\n".join(f"- {i}" for i in issues)
         user_prompt = f"File: {file_name}\n\nIssues to fix:\n{issues_text}\n\nOriginal Code:\n```\n{code_content}\n```"
         
         try:
             result_text = generate_text(user_prompt, self.heal_prompt, temperature=0.1)
             
-            # Extract the code block securely
+            # Extract the code block (more relaxed regex)
             import re
-            match = re.search(r"```[a-zA-Z]*\s*\n([\s\S]*?)```", result_text)
+            match = re.search(r"```[a-zA-Z]*\s*([\s\S]*?)```", result_text)
             if match:
                 fixed_code = match.group(1).strip()
-                # The message is whatever comes before the code block
                 message = result_text[:match.start()].strip() or "Auto-heal completed."
             else:
-                # Fallback: assume the whole thing is code if no markdown blocks
                 fixed_code = result_text.strip()
                 message = "Auto-heal completed."
                 
+            print(f"[Guardian:Heal] Successfully generated fixed code for {file_name}")
             return AutoHealResponse(fixed_code=fixed_code, message=message)
         except Exception as e:
+            print(f"[Guardian:Heal] Error: {e}")
             alert_system.add_alert(
                 title="Guardian Heal Failed",
                 message=str(e),
@@ -91,30 +93,31 @@ Return ONLY your explanation and the code block.
     def save_file(self, file_path: str, content: str) -> bool:
         """
         Safely saves content to the given absolute file_path.
-        Includes basic directory traversal protection.
         """
-        # Security: Prevent writing outside of the storage/repos dir or the current working directory
-        cwd = os.getcwd()
+        cwd = os.path.abspath(os.getcwd())
         abs_path = os.path.abspath(file_path)
         
-        # We allow writing to the local checkout OR the storage dir
+        # Normpath to handle mixed slashes in Windows/Linux interop
+        abs_path = os.path.normpath(abs_path)
         storage_dir = os.path.abspath(os.path.join(cwd, "storage"))
         
         is_safe = abs_path.startswith(cwd) or abs_path.startswith(storage_dir)
         
         if not is_safe:
+            print(f"[Guardian:Save] BLOCKED: Path {abs_path} is outside allowed directories.")
             alert_system.add_alert(
                 title="Security Alert",
                 message=f"Blocked attempt to write to protected path: {file_path}",
                 severity="error"
             )
-            raise PermissionError("Path is outside allowed project directories.")
+            raise PermissionError(f"Path is outside allowed project directories: {file_path}")
 
         try:
             os.makedirs(os.path.dirname(abs_path), exist_ok=True)
             with open(abs_path, 'w', encoding='utf-8') as f:
                 f.write(content)
             
+            print(f"[Guardian:Save] Successfully saved {abs_path}")
             alert_system.add_alert(
                 title="File Saved",
                 message=f"Successfully updated {os.path.basename(abs_path)}",
@@ -122,6 +125,7 @@ Return ONLY your explanation and the code block.
             )
             return True
         except Exception as e:
+            print(f"[Guardian:Save] Failed to save {abs_path}: {e}")
             alert_system.add_alert(
                 title="Save Failed",
                 message=f"Could not save {file_path}: {e}",
