@@ -16,6 +16,10 @@ class Settings:
     JIRA_EMAIL: str = os.getenv("JIRA_EMAIL", "")
     JIRA_API_TOKEN: str = os.getenv("JIRA_API_TOKEN", "")
 
+    # SonarQube
+    SONAR_URL: str = os.getenv("SONAR_URL", "http://localhost:9000")
+    SONAR_TOKEN: str = os.getenv("SONAR_TOKEN", "")
+
     # Server
     APP_HOST: str = os.getenv("APP_HOST", "0.0.0.0")
     APP_PORT: int = int(os.getenv("APP_PORT", 8000))

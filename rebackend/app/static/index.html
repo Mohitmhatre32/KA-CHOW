@@ -366,6 +366,7 @@
       <div class="tab active" onclick="switchTab(event,'stats')">📊 Stats</div>
       <div class="tab" onclick="switchTab(event,'commits')">📜 Commits</div>
       <div class="tab" onclick="switchTab(event,'architect')">🏗️ Architect</div>
+      <div class="tab" onclick="switchTab(event,'mentor')">🎓 Mentor</div>
     </div>
 
     <div class="tab-content active" id="tab-stats">
@@ -436,6 +437,51 @@
            </div>
            <div id="impact-list"></div>
            <button class="btn btn-primary" id="btn-jira-tasks" style="width:100%; margin-top:12px; font-size:.7rem; background:#0052cc; color:#fff;" onclick="createJiraTasks()" disabled>➕ Export to Jira Sub-tasks</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mentor Tab -->
+    <div class="tab-content" id="tab-mentor">
+      <div class="panel-body">
+        <h3 style="font-size:.85rem; margin-bottom:12px; color:var(--accent2)">🎓 Engineering Mentor</h3>
+        
+        <!-- Daily Quest -->
+        <div id="mentor-quest" style="background:linear-gradient(135deg, rgba(63,185,80,.1), rgba(88,166,255,.05)); border:1px solid var(--accent2); border-radius:12px; padding:14px; margin-bottom:20px; position:relative; overflow:hidden;">
+          <div style="font-size:.6rem; font-weight:700; color:var(--accent2); letter-spacing:1px; margin-bottom:6px;">DAILY QUEST</div>
+          <div id="quest-title" style="font-size:.85rem; font-weight:700; color:var(--text); margin-bottom:4px;">🌱 Explore the Codebase</div>
+          <div id="quest-desc" style="font-size:.7rem; color:var(--muted); line-height:1.4; margin-bottom:12px;">Read the architecture map and understand the agent patterns.</div>
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+             <span id="quest-xp" style="font-size:.65rem; background:rgba(63,185,80,.2); color:var(--accent2); padding:2px 8px; border-radius:99px; font-weight:700;">+25 XP</span>
+             <a id="quest-link" href="#" target="_blank" style="font-size:.65rem; color:var(--accent2); text-decoration:none; font-weight:600;">Fix in Sonar →</a>
+          </div>
+        </div>
+
+        <!-- Onboarding Progress -->
+        <div style="margin-bottom:20px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+            <label style="font-size:.7rem; color:var(--muted); font-weight:700;">ONBOARDING PATH</label>
+            <select id="mentor-role" onchange="loadOnboarding()" style="font-size:.65rem; padding:2px 6px; background:var(--card); border:1px solid var(--border); color:var(--text); border-radius:4px;">
+              <option value="Backend">Backend</option>
+              <option value="Frontend">Frontend</option>
+              <option value="SRE">SRE</option>
+            </select>
+          </div>
+          <div id="onboarding-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+        </div>
+
+        <hr style="border:0; border-top:1px solid var(--border); margin:20px 0;">
+
+        <!-- Mentor Chat -->
+        <div style="display:flex; flex-direction:column; height:300px;">
+          <label style="font-size:.7rem; color:var(--muted); font-weight:700; margin-bottom:10px;">ASK THE MENTOR</label>
+          <div id="mentor-chat-box" style="flex:1; overflow-y:auto; background:rgba(0,0,0,.2); border:1px solid var(--border); border-radius:8px; padding:10px; margin-bottom:10px; font-size:.75rem; line-height:1.5;">
+            <div style="color:var(--muted); text-align:center; margin-top:40px;">Ask me about the architecture, tech stack, or specific files.</div>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <input id="mentor-input" type="text" placeholder="Explain the auth flow..." style="flex:1; font-size:.75rem; padding:8px 12px; background:var(--card); border:1px solid var(--border); border-radius:8px; color:var(--text);" onkeyup="if(event.key==='Enter') askMentor()">
+            <button class="btn btn-primary" style="padding:8px 14px;" onclick="askMentor()">➤</button>
+          </div>
         </div>
       </div>
     </div>
@@ -622,6 +668,7 @@ async function loadRepo() {
     renderGraph(data);
     fetchCommits(src);
     fetchAlerts();
+    loadMentorData(src);
   } catch(e) {
     alert('Error: ' + e.message);
   } finally {
@@ -1140,6 +1187,87 @@ async function createJiraTasks() {
     const data = await res.json();
     alert(data.message);
   } catch(e) { alert('Jira Error: ' + e.message); }
+}
+
+// ── Mentor UI ─────────────────────────────
+async function loadMentorData(src) {
+  loadOnboarding();
+  loadQuest(src);
+}
+
+async function loadOnboarding() {
+  const role = document.getElementById('mentor-role').value;
+  const list = document.getElementById('onboarding-list');
+  list.innerHTML = '<div style="font-size:.7rem; color:var(--muted)">⏳ Loading checklist...</div>';
+  
+  try {
+    const res = await fetch(API + '/api/mentor/onboarding/' + role);
+    const data = await res.json();
+    list.innerHTML = data.map(s => `
+      <div style="display:flex; gap:10px; align-items:flex-start; background:var(--surface); padding:8px; border-radius:6px; border:1px solid var(--border);">
+        <input type="checkbox" ${s.is_completed ? 'checked' : ''} style="margin-top:2px;">
+        <div style="flex:1;">
+          <div style="font-size:.75rem; font-weight:600; color:var(--text);">${s.task}</div>
+          <div style="font-size:.65rem; color:var(--muted);">${s.description}</div>
+        </div>
+      </div>
+    `).join('');
+  } catch(e) { list.innerHTML = `<div style="color:var(--danger); font-size:.7rem;">Failed to load onboarding</div>`; }
+}
+
+async function loadQuest(src) {
+  try {
+    const res = await fetch(API + '/api/mentor/quest?repo_url=' + encodeURIComponent(src));
+    const data = await res.json();
+    document.getElementById('quest-title').textContent = data.title;
+    document.getElementById('quest-desc').textContent = data.issue_description;
+    document.getElementById('quest-xp').textContent = '+' + data.xp_reward + ' XP';
+    document.getElementById('quest-link').href = data.sonar_link;
+  } catch(e) { console.error('Quest error:', e); }
+}
+
+async function askMentor() {
+  const input = document.getElementById('mentor-input');
+  const q = input.value.trim();
+  if (!q) return;
+  
+  const box = document.getElementById('mentor-chat-box');
+  const userRole = document.getElementById('mentor-role').value;
+  const repoUrl = document.getElementById('repo-input').value.trim();
+  
+  // Append user message
+  const userDiv = document.createElement('div');
+  userDiv.style = "margin-bottom:12px; background:rgba(88,166,255,.1); padding:8px; border-radius:6px; border-left:3px solid var(--accent);";
+  userDiv.innerHTML = `<strong>You:</strong> ${q}`;
+  box.appendChild(userDiv);
+  input.value = '';
+  box.scrollTop = box.scrollHeight;
+  
+  // Append loading
+  const aiDiv = document.createElement('div');
+  aiDiv.style = "margin-bottom:12px; background:var(--surface); padding:8px; border-radius:6px; border-left:3px solid var(--accent2);";
+  aiDiv.innerHTML = `<strong>Mentor:</strong> <span style="color:var(--muted)">🤔 Thinking...</span>`;
+  box.appendChild(aiDiv);
+  
+  try {
+    const res = await fetch(API + '/api/mentor/chat', {
+       method: 'POST',
+       headers: {'Content-Type': 'application/json'},
+       body: JSON.stringify({
+         question: q,
+         user_role: userRole,
+         repo_url: repoUrl
+       })
+    });
+    const data = await res.json();
+    aiDiv.innerHTML = `<strong>Mentor:</strong> ${data.answer.replace(/\n/g, '<br>')}`;
+    if (data.sources && data.sources.length > 0) {
+      aiDiv.innerHTML += `<div style="margin-top:8px; font-size:.6rem; color:var(--muted)">Sources: ${data.sources.join(', ')}</div>`;
+    }
+  } catch(e) {
+    aiDiv.innerHTML = `<strong>Mentor:</strong> <span style="color:var(--danger)">Sorry, I encountered an error.</span>`;
+  }
+  box.scrollTop = box.scrollHeight;
 }
 
 // Auto-poll alerts
