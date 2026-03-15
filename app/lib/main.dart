@@ -5,7 +5,7 @@ import 'core/theme.dart';
 import 'views/widgets/glass_card.dart';
 import 'views/widgets/cyber_button.dart';
 import 'views/widgets/mesh_background.dart';
-import 'views/navigation_shell.dart';
+import 'views/screens/project_selection_screen.dart';
 
 void main() {
   runApp(
@@ -96,7 +96,7 @@ class WelcomeScreen extends StatelessWidget {
                         text: 'INITIALIZE DASHBOARD',
                         onPressed: () {
                           Navigator.of(context).pushReplacement(
-                            MaterialPageRoute(builder: (context) => const MainNavigationShell()),
+                            MaterialPageRoute(builder: (context) => const ProjectSelectionScreen()),
                           );
                         },
                         icon: Icons.rocket_launch_outlined,
