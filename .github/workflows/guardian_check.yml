@@ -1,0 +1,94 @@
+name: "🛡️ Guardian — PR Quality Gate"
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  pull-requests: write
+  checks: write
+  contents: read
+
+jobs:
+  guardian-review:
+    name: Guardian AST Code Review
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout code ────────────────────────────────────────────
+      - name: Checkout PR code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2          # Need HEAD~1 for diff
+
+      # ── 2. Set up Python ────────────────────────────────────────────
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # ── 3. Run Guardian check script ────────────────────────────────
+      - name: Run Guardian AST check
+        id: guardian
+        run: |
+          python .github/workflows/guardian_check.py 2>&1 | tee guardian_output.txt
+          echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      # ── 4. Read report for PR comment ───────────────────────────────
+      - name: Read guardian output
+        id: report
+        run: |
+          REPORT=$(cat guardian_output.txt)
+          # Escape newlines for multiline GitHub env
+          echo "report<<EOF" >> $GITHUB_OUTPUT
+          echo "$REPORT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      # ── 5. Post PR comment ──────────────────────────────────────────
+      - name: Post Guardian PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const report = `${{ steps.report.outputs.report }}`;
+            const exitCode = `${{ steps.guardian.outputs.exit_code }}`;
+            const passed = exitCode === '0';
+
+            const icon = passed ? '✅' : '❌';
+            const status = passed ? 'PASSED — Ready to Merge' : 'MERGE BLOCKED — Quality Gate Failed';
+
+            const body = [
+              `## ${icon} Guardian CI/CD Report`,
+              `**Status:** \`${status}\``,
+              ``,
+              `\`\`\``,
+              report,
+              `\`\`\``,
+              ``,
+              passed
+                ? `> 🟢 All quality checks passed. This PR is approved to merge.`
+                : `> 🔴 Fix the issues above before merging. Use the **Auto-Heal** feature in the KA-CHOW dashboard to auto-fix them.`,
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+
+      # ── 6. Upload audit log as artifact ─────────────────────────────
+      - name: Upload audit log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: guardian-audit-log
+          path: guardian_audit.log
+          retention-days: 30
+
+      # ── 7. Fail the job if Guardian blocked the PR ──────────────────
+      - name: Enforce quality gate
+        if: steps.guardian.outputs.exit_code != '0'
+        run: |
+          echo "::error::Guardian blocked this PR. See the PR comment for details."
+          exit 1

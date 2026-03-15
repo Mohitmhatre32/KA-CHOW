@@ -1,7 +1,35 @@
 import os
+import json
+from datetime import datetime, timezone
 from app.core.llm import generate_json, generate_text
 from app.core.alerts import alert_system
 from .models import PRReviewResponse, AutoHealResponse
+
+# Audit log path — stored in the rebackend's storage folder
+_AUDIT_LOG = os.path.join(os.path.dirname(__file__), "..", "..", "..", "storage", "guardian_audit.log")
+
+
+def _save_audit_log(file_name: str, passed: bool, issues: list, message: str) -> None:
+    """
+    Appends a single JSON-lines audit record to guardian_audit.log.
+    This creates the "paper trail" so Staff Engineers can review every
+    Guardian decision (Pass or Fail) without re-running the checks.
+    """
+    record = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "file_name": file_name,
+        "passed": passed,
+        "issues_count": len(issues),
+        "message": message,
+        "issues": issues,
+    }
+    try:
+        os.makedirs(os.path.dirname(_AUDIT_LOG), exist_ok=True)
+        with open(_AUDIT_LOG, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record) + "\n")
+    except OSError:
+        pass  # Non-fatal — review still returns to caller
+
 
 class GuardianService:
     def __init__(self):
@@ -50,6 +78,9 @@ Return ONLY your explanation and the code block.
             # Sanity check: if there are issues, it shouldn't mathematically pass
             if issues and passed:
                 passed = False
+
+            # ── Write audit log (the "paper trail") ─────────────────────────
+            _save_audit_log(file_name, passed, issues, message)
                 
             return PRReviewResponse(passed=passed, issues=issues, message=message)
         except Exception as e:
@@ -59,6 +90,7 @@ Return ONLY your explanation and the code block.
                 severity="error"
             )
             raise ValueError(f"Failed to generate review: {e}")
+
 
     def heal_code(self, file_name: str, code_content: str, issues: list[str]) -> AutoHealResponse:
         issues_text = "\n".join(f"- {i}" for i in issues)

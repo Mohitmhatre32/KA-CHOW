@@ -10,7 +10,8 @@ import {
   AlertCircle, Loader2, RefreshCcw, Folder, Flame, Copy, Sparkles, type LucideProps,
 } from "lucide-react"
 import { toast } from "sonner"
-import { generateDocs, type DocsResponse } from "@/lib/api"
+import { generateDocs, incrementalUpdate, type DocsResponse, type IncrementalUpdateResult } from "@/lib/api"
+import { getActiveRepo } from "@/lib/repo-store"
 import { Button } from "@/components/ui/button"
 import { DocsModal } from "./docs-modal"
 
@@ -55,6 +56,10 @@ export function GraphView() {
   const [isDocsModalOpen, setIsDocsModalOpen] = useState(false)
   const [isGeneratingDocs, setIsGeneratingDocs] = useState(false)
   const [generatedDocs, setGeneratedDocs] = useState<DocsResponse | null>(null)
+
+  // Incremental update state
+  const [isIncremental, setIsIncremental] = useState(false)
+  const [incrementalResult, setIncrementalResult] = useState<IncrementalUpdateResult | null>(null)
 
   const { nodes: rawNodes, graphMeta, isLive, isRefreshing, refresh } = useGraphData()
   const [nodes, setNodes] = useState<(GraphNode & d3.SimulationNodeDatum)[]>([])
@@ -158,6 +163,31 @@ export function GraphView() {
 
   const selectedNode = selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) : null
 
+  const handleIncrementalUpdate = async () => {
+    const activeRepo = getActiveRepo()
+    if (!activeRepo?.repo_url) {
+      toast.error("No repository loaded. Please scan a repo in the Librarian tab first.")
+      return
+    }
+    setIsIncremental(true)
+    setIncrementalResult(null)
+    try {
+      const result = await incrementalUpdate(activeRepo.repo_url)
+      setIncrementalResult(result)
+      if (result.graph_updated) {
+        toast.success(`⚡ Updated ${result.changed_files.length} file(s) in ${result.update_time_seconds}s`)
+        // Trigger a lightweight graph refresh to show the new edges
+        refresh()
+      } else {
+        toast.info("Graph is already up to date — no changes detected.")
+      }
+    } catch (e) {
+      toast.error(`Incremental update failed: ${(e as Error).message}`)
+    } finally {
+      setIsIncremental(false)
+    }
+  }
+
   const handleGenerateDocs = async () => {
     if (!graphMeta || !rawNodes.length) {
       toast.error("No project data available to generate documentation.")
@@ -248,7 +278,31 @@ export function GraphView() {
               <Sparkles className={`h-2.5 w-2.5 ${isGeneratingDocs ? "animate-pulse" : ""}`} />
               {isGeneratingDocs ? "Generating..." : "Generate Docs"}
             </button>
+
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleIncrementalUpdate();
+              }}
+              disabled={isIncremental}
+              className="flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[10px] border border-amber-500/30 bg-amber-500/10 text-amber-400 transition-all hover:bg-amber-500/20 disabled:opacity-50"
+              title="Re-index only changed files (git diff)"
+            >
+              <Zap className={`h-2.5 w-2.5 ${isIncremental ? "animate-pulse" : ""}`} />
+              {isIncremental ? "Updating..." : "⚡ Incremental"}
+            </button>
           </div>
+          {/* Benchmark result pill */}
+          {incrementalResult && (
+            <div className="mt-1 flex items-center gap-1.5 rounded bg-amber-500/10 border border-amber-500/20 px-2 py-0.5">
+              <Zap className="h-2.5 w-2.5 text-amber-400" />
+              <span className="font-mono text-[9px] text-amber-400">
+                {incrementalResult.graph_updated
+                  ? `Updated ${incrementalResult.changed_files.length} file(s) in ${incrementalResult.update_time_seconds}s · Baseline ~${incrementalResult.full_scan_baseline_seconds}s`
+                  : "Already up to date"}
+              </span>
+            </div>
+          )}
         </div>
       )}
 

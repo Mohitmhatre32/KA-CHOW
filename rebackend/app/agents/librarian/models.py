@@ -32,3 +32,17 @@ class CommitInfo(BaseModel):
     author: str
     date: str
     commit_type: str
+
+class IncrementalUpdateRequest(BaseModel):
+    """Request body for the incremental update endpoint."""
+    repo_url: str                  # local path or remote URL (already cloned)
+
+class IncrementalUpdateResult(BaseModel):
+    """Result returned after a delta re-index run."""
+    changed_files: List[str]       # files re-processed
+    skipped_files: int             # unchanged files that were skipped
+    total_files: int               # total file count in the project
+    update_time_seconds: float     # benchmark — how long this took
+    full_scan_baseline_seconds: float  # estimated baseline for comparison
+    graph_updated: bool            # whether the graph cache was refreshed
+    message: str                   # human-readable summary

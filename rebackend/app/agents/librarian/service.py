@@ -14,7 +14,9 @@ import os
 import ast
 import json
 import re
+import time
 import hashlib
+import subprocess
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple, Any
 
@@ -176,6 +178,180 @@ class LibrarianService:
         except (InvalidGitRepositoryError, Exception) as e:
             print(f"[Librarian] git history error: {e}")
             return []
+
+    def incremental_update(self, input_source: str) -> dict:
+        """
+        Incremental Brain — Task 3 Implementation.
+
+        Instead of a full re-scan (which may take 60+ seconds on large repos),
+        this method:
+          1. Runs `git diff --name-only HEAD~1` to find ONLY changed files.
+          2. Re-processes just those files (re-chunks + upserts to ChromaDB).
+          3. Hot-swaps the affected graph nodes/edges in the cached graph.json.
+          4. Returns a benchmark comparing update time vs a full-scan estimate.
+
+        This proves the system is "living" — updates in seconds, not minutes.
+        """
+        t_start = time.time()
+
+        # ── 1. Resolve project root ───────────────────────────────────────────
+        if input_source.startswith("http"):
+            repo_name = input_source.rstrip("/").split("/")[-1].replace(".git", "")
+            project_root = os.path.join(settings.REPO_STORAGE_PATH, repo_name)
+        else:
+            project_root = input_source
+            repo_name = os.path.basename(project_root.rstrip("/\\"))
+
+        if not os.path.isdir(project_root):
+            raise ValueError(f"Project path not found: {project_root}")
+
+        # ── 2. Load cached graph (so we can hot-swap nodes) ──────────────────
+        cache_file = os.path.join(project_root, "_kachow_graph.json")
+        if not os.path.exists(cache_file):
+            raise FileNotFoundError(
+                "No cached graph found. Please run a full scan first via /librarian/process."
+            )
+        with open(cache_file, "r", encoding="utf-8") as f:
+            graph_data = json.load(f)
+
+        total_files = sum(1 for n in graph_data.get("nodes", []) if n.get("type") == "file")
+
+        # ── 3. Get changed files via git diff ─────────────────────────────────
+        changed_files: List[str] = []
+        try:
+            result = subprocess.run(
+                ["git", "diff", "--name-only", "--diff-filter=ACM", "HEAD~1", "HEAD"],
+                cwd=project_root,
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            raw_changed = [
+                f.strip() for f in result.stdout.splitlines()
+                if f.strip() and os.path.isfile(os.path.join(project_root, f.strip()))
+                and any(f.strip().endswith(ext) for ext in settings.SUPPORTED_EXTENSIONS)
+            ]
+            changed_files = raw_changed
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            # git not available or no history — do nothing
+            changed_files = []
+
+        if not changed_files:
+            elapsed = round(time.time() - t_start, 2)
+            # Estimate full scan time: ~0.5s per file as baseline
+            baseline = round(total_files * 0.5, 1)
+            return {
+                "changed_files": [],
+                "skipped_files": total_files,
+                "total_files": total_files,
+                "update_time_seconds": elapsed,
+                "full_scan_baseline_seconds": baseline,
+                "graph_updated": False,
+                "message": f"No changed files detected. Graph is already up to date. (Checked in {elapsed}s)",
+            }
+
+        # ── 4. Re-process only changed files ──────────────────────────────────
+        chunks_to_embed: List[dict] = []
+        module_map: Dict[str, str] = {}
+
+        for rel_path in changed_files:
+            full_path = os.path.join(project_root, rel_path)
+            ext = os.path.splitext(rel_path)[1]
+            language = _lang(ext)
+
+            try:
+                with open(full_path, "r", encoding="utf-8", errors="ignore") as fh:
+                    content = fh.read()
+            except OSError:
+                continue
+
+            # Re-chunk the updated file
+            for idx, chunk in enumerate(_chunk_text(content)):
+                chunks_to_embed.append({
+                    "id": vs.make_chunk_id(rel_path, idx),
+                    "document": chunk,
+                    "metadata": {
+                        "file_path": rel_path,
+                        "language": language,
+                        "chunk_index": idx,
+                        "project": repo_name,
+                    },
+                })
+
+            # Build module map for Python hot-swap
+            if ext == ".py":
+                mod = rel_path.replace("/", ".").replace(".py", "")
+                module_map[mod] = rel_path
+                module_map[os.path.basename(rel_path).replace(".py", "")] = rel_path
+
+        # Upsert changed chunks (ChromaDB upsert is idempotent)
+        if chunks_to_embed:
+            try:
+                vs.upsert_chunks(repo_name, chunks_to_embed)
+            except Exception as e:
+                print(f"[Librarian][Incremental] ChromaDB upsert failed: {e}")
+
+        # ── 5. Hot-swap graph edges for changed Python files ──────────────────
+        existing_edges = graph_data.get("edges", [])
+        # Remove stale imports FROM changed files (we will re-add below)
+        pruned_edges = [
+            e for e in existing_edges
+            if not (e.get("source") in changed_files and e.get("relation") == "imports")
+        ]
+
+        for rel_path in changed_files:
+            if not rel_path.endswith(".py"):
+                continue
+            full_path = os.path.join(project_root, rel_path)
+            try:
+                with open(full_path, "r", encoding="utf-8", errors="ignore") as fh:
+                    content = fh.read()
+                tree = ast.parse(content, filename=rel_path)
+                imports = self._extract_imports(tree)
+                known_files = {n["id"] for n in graph_data.get("nodes", [])}
+                for imp in imports:
+                    resolved = self._resolve_import(imp, module_map)
+                    if resolved and resolved != rel_path and resolved in known_files:
+                        new_edge = {"source": rel_path, "target": resolved, "relation": "imports"}
+                        if new_edge not in pruned_edges:
+                            pruned_edges.append(new_edge)
+            except (SyntaxError, OSError):
+                continue
+
+        graph_data["edges"] = pruned_edges
+
+        # ── 6. Persist updated graph cache ────────────────────────────────────
+        try:
+            with open(cache_file, "w", encoding="utf-8") as f:
+                json.dump(graph_data, f, default=str)
+        except OSError as e:
+            print(f"[Librarian][Incremental] Cache write failed: {e}")
+
+        # ── 7. Benchmark result ───────────────────────────────────────────────
+        elapsed = round(time.time() - t_start, 2)
+        # Estimate what a full scan would have taken (0.5s per file heuristic)
+        baseline = round(total_files * 0.5, 1)
+        skipped = total_files - len(changed_files)
+
+        alert_system.add_alert(
+            title="⚡ Incremental Update Complete",
+            message=f"Re-indexed {len(changed_files)} file(s) in {elapsed}s (vs ~{baseline}s full scan).",
+            severity="success",
+        )
+
+        return {
+            "changed_files": changed_files,
+            "skipped_files": skipped,
+            "total_files": total_files,
+            "update_time_seconds": elapsed,
+            "full_scan_baseline_seconds": baseline,
+            "graph_updated": True,
+            "message": (
+                f"⚡ Incremental update complete: re-indexed {len(changed_files)} file(s) "
+                f"in {elapsed}s. Skipped {skipped} unchanged files. "
+                f"Full scan baseline: ~{baseline}s."
+            ),
+        }
 
     # ─────────────────────────────────────────────────────────────────────────
     # PIPELINE INTERNALS
