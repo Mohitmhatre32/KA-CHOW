@@ -59,9 +59,9 @@ export function GraphView() {
   const { nodes: rawNodes, graphMeta, isLive, isRefreshing, refresh } = useGraphData()
   const [nodes, setNodes] = useState<(GraphNode & d3.SimulationNodeDatum)[]>([])
 
-  // 1. Initialize Simulation
+  // 1. Initialize Simulation (Pre-calculated layout to avoid blooming animation)
   useEffect(() => {
-    setMounted(true)
+    setMounted(false)
     if (!rawNodes.length) return
 
     const simulationNodes = rawNodes.map((n) => ({ ...n })) as (GraphNode & d3.SimulationNodeDatum)[]
@@ -80,47 +80,20 @@ export function GraphView() {
       .force("x", d3.forceX(500).strength(0.2))
       .force("y", d3.forceY(400).strength(0.2))
       .force("collide", d3.forceCollide().radius(55))
-      .on("tick", () => {
-        setNodes([...simulationNodes])
-      })
+      .stop()
+
+    // Pre-calculate positions so it starts settled
+    simulation.tick(300)
+    setNodes(simulationNodes)
+    
+    // Trigger mount animation after layout is ready
+    setTimeout(() => setMounted(true), 50)
 
     simRef.current = simulation
     return () => {
       simulation.stop()
     }
   }, [rawNodes])
-
-  // 2. Dragging Logic
-  useEffect(() => {
-    if (!svgRef.current || !nodes.length) return
-
-    const svg = d3.select(svgRef.current)
-
-    const drag = d3.drag<SVGGElement, any>()
-      .on("start", (event) => {
-        if (!event.active) simRef.current?.alphaTarget(0.2).restart()
-      })
-      .on("drag", (event) => {
-        const nodeId = event.sourceEvent.target.closest('g')?.id
-        const node = simRef.current?.nodes().find(n => (n as any).id === nodeId)
-        if (node) {
-          (node as any).fx = event.x;
-          (node as any).fy = event.y;
-        }
-      })
-      .on("end", (event) => {
-        if (!event.active) simRef.current?.alphaTarget(0)
-        const nodeId = event.sourceEvent.target.closest('g')?.id
-        const node = simRef.current?.nodes().find(n => (n as any).id === nodeId)
-        if (node) {
-          (node as any).fx = null;
-          (node as any).fy = null;
-        }
-      })
-
-    svg.selectAll<SVGGElement, any>(".node-group").call(drag)
-    return () => { }
-  }, [nodes])
 
   const edges = useMemo(() => {
     const lines: any[] = []
@@ -282,7 +255,7 @@ export function GraphView() {
         onMouseUp={() => setIsPanning(false)}
         onMouseLeave={() => setIsPanning(false)}
         onClick={() => setSelectedNodeId(null)}
-        className={`h-full w-full transition-opacity duration-1000 ${mounted ? "opacity-100" : "opacity-0"} ${isPanning ? "cursor-grabbing" : "cursor-grab"}`}
+        className={`h-full w-full transition-all duration-1000 ease-out transform ${mounted ? "opacity-100 scale-100" : "opacity-0 scale-95"} ${isPanning ? "cursor-grabbing" : "cursor-grab"}`}
       >
         <defs>
           <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
@@ -428,7 +401,7 @@ export function GraphView() {
       {/* 3. Interaction Hint Overlay (Bottom Left) */}
       <div className="absolute bottom-4 left-4 flex flex-col gap-0.5 pointer-events-none">
         <span className="text-[9px] font-bold text-muted-foreground/60 uppercase tracking-widest">
-          Left Click: Select · Drag: Move
+          Left Click: Select Node
         </span>
         <span className="text-[9px] font-medium text-muted-foreground/40 uppercase tracking-widest">
           Scroll: Zoom · Canvas Drag: Pan
