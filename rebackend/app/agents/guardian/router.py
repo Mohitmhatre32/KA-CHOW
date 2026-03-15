@@ -8,7 +8,7 @@ router = APIRouter()
 
 @router.post("/review", response_model=PRReviewResponse, summary="LLM Code Review")
 async def review_code(request: ReviewRequest):
-    print(f"POST /api/guardian/review - {request.file_name}")
+    print(f"\n[Guardian] POST /review -> file={request.file_name}")
     try:
         return guardian_service.review_code(request.file_name, request.code_content)
     except Exception as e:
@@ -16,7 +16,7 @@ async def review_code(request: ReviewRequest):
 
 @router.post("/heal", response_model=AutoHealResponse, summary="Auto-Heal Code")
 async def heal_code(request: HealRequest):
-    print(f"POST /api/guardian/heal - {request.file_name}")
+    print(f"\n[Guardian] POST /heal -> file={request.file_name}")
     try:
         return guardian_service.heal_code(request.file_name, request.code_content, request.issues)
     except Exception as e:
@@ -24,7 +24,7 @@ async def heal_code(request: HealRequest):
 
 @router.post("/save", summary="Save File to Disk")
 async def save_file(request: SaveRequest):
-    print(f"POST /api/guardian/save - {request.file_path[:50]}...")
+    print(f"\n[Guardian] POST /save -> path={request.file_path[:50]}...")
     try:
         success = guardian_service.save_file(request.file_path, request.content)
         return {"success": success, "message": "File saved successfully."}

@@ -33,6 +33,20 @@ class CommitInfo(BaseModel):
     date: str
     commit_type: str
 
+class PullRequestInfo(BaseModel):
+    id: int
+    number: int
+    title: str
+    state: str
+    author: str
+    created_at: str
+    url: str
+
+class GithubSyncResult(BaseModel):
+    commits: List[CommitInfo]
+    pull_requests: List[PullRequestInfo]
+    message: str
+
 class IncrementalUpdateRequest(BaseModel):
     """Request body for the incremental update endpoint."""
     repo_url: str                  # local path or remote URL (already cloned)

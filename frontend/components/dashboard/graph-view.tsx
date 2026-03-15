@@ -192,6 +192,30 @@ export function GraphView() {
     }
   }, [selectedNodeId]) // Only re-run when selection changes
 
+  const handleIncrementalUpdate = async () => {
+    const activeRepo = getActiveRepo()
+    if (!activeRepo?.repo_url) {
+      toast.error("No repository loaded. Please scan a repo in the Librarian tab first.")
+      return
+    }
+    setIsIncremental(true)
+    setIncrementalResult(null)
+    try {
+      const result = await incrementalUpdate(activeRepo.repo_url)
+      setIncrementalResult(result)
+      if (result.graph_updated) {
+        toast.success(`⚡ Updated ${result.changed_files.length} file(s) in ${result.update_time_seconds}s`)
+        refresh()
+      } else {
+        toast.info("Graph is already up to date — no changes detected.")
+      }
+    } catch (e) {
+      toast.error(`Incremental update failed: ${(e as Error).message}`)
+    } finally {
+      setIsIncremental(false)
+    }
+  }
+
   const handleGenerateDocs = async () => {
     if (!graphMeta || !rawNodes.length) {
       toast.error("No project data available to generate documentation.")
@@ -295,6 +319,7 @@ export function GraphView() {
               <Zap className={`h-2.5 w-2.5 ${isIncremental ? "animate-pulse" : ""}`} />
               {isIncremental ? "Updating..." : "⚡ Incremental"}
             </button>
+
           </div>
           {/* Benchmark result pill */}
           {incrementalResult && (

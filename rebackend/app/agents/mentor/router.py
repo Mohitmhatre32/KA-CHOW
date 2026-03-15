@@ -13,6 +13,7 @@ router = APIRouter()
 @router.post("/chat", response_model=MentorChatResponse)
 async def chat_with_mentor(request: MentorChatRequest):
     """RAG-powered Q&A endpoint."""
+    print(f"\n[Mentor] POST /chat -> question={request.question[:50]}...")
     try:
         return mentor_service.ask(request)
     except Exception as e:
@@ -22,6 +23,7 @@ async def chat_with_mentor(request: MentorChatRequest):
 @router.get("/onboarding/{role}", response_model=List[OnboardingStep])
 async def get_onboarding(role: str):
     """Returns a curated onboarding checklist for the given role."""
+    print(f"\n[Mentor] GET /onboarding/{role}")
     try:
         return mentor_service.get_onboarding_path(role)
     except Exception as e:
@@ -31,6 +33,7 @@ async def get_onboarding(role: str):
 @router.get("/quest", response_model=StarterQuest)
 async def get_daily_quest(repo_url: str = None):
     """Returns a gamified quest based on code quality."""
+    print(f"\n[Mentor] GET /quest -> repo={repo_url}")
     try:
         return mentor_service.get_starter_quest(repo_url)
     except Exception as e:
@@ -40,6 +43,7 @@ async def get_daily_quest(repo_url: str = None):
 @router.get("/timeline", response_model=List[TimelineEvent])
 async def get_timeline(repo_url: str = None):
     """Returns git commits for the Architecture Time Machine."""
+    print(f"\n[Mentor] GET /timeline -> repo={repo_url}")
     try:
         return mentor_service.get_git_history(repo_url)
     except Exception as e:

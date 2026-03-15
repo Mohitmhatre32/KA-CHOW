@@ -26,6 +26,7 @@ class ImpactResponse(BaseModel):
     impacted_files: List[ImpactNode]
     total_impacted: int
     blast_radius_depth: int
+    scenario_explanation: Optional[str] = None
 
 # --- Jira Integration ---
 class JiraTicket(BaseModel):

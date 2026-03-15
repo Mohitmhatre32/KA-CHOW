@@ -9,6 +9,7 @@ async def get_mobile_status():
     Aggregated status for the mobile dashboard.
     Returns technical debt, code quality, and other metrics.
     """
+    print("\n[Mobile] GET /status")
     return {
         "technical_debt": 12.5,
         "code_quality": 88.2,
@@ -26,6 +27,7 @@ async def get_mobile_workflows():
     """
     Detailed list of engineering workflows for control via mobile.
     """
+    print("\n[Mobile] GET /workflows")
     return [
         {"id": "wf_001", "name": "Codebase Scanning", "status": "Running", "agent": "Librarian"},
         {"id": "wf_002", "name": "Documentation Sync", "status": "Scheduled", "agent": "Librarian"},
@@ -37,6 +39,7 @@ async def control_workflow(wf_id: str, action: str):
     """
     Control endpoint for starting/stopping/re-running workflows.
     """
+    print(f"\n[Mobile] POST /workflows/{wf_id}/control -> action={action}")
     return {"message": f"Action '{action}' triggered for workflow '{wf_id}'", "ok": True}
 
 @router.get("/approvals")
@@ -44,6 +47,7 @@ async def get_mobile_approvals():
     """
     Critical changes requiring architect approval.
     """
+    print("\n[Mobile] GET /approvals")
     return [
         {
             "id": "app_001",
@@ -73,6 +77,7 @@ async def get_mobile_tickets():
     """
     List of active engineering tickets (Jira-style).
     """
+    print("\n[Mobile] GET /tickets")
     return [
         {
             "id": "TIC-101",

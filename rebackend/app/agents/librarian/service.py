@@ -21,6 +21,7 @@ import time
 import hashlib
 import subprocess
 import threading
+import traceback
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any
 
@@ -32,7 +33,9 @@ from app.core.config import settings
 from app.core.alerts import alert_system
 from app.core import vector_store as vs
 from app.core.llm import client as groq_client
-from .models import GraphResponse, FileNode, CommitInfo
+from .models import GraphResponse, FileNode, CommitInfo, PullRequestInfo, GithubSyncResult
+import urllib.request
+import urllib.error
 
 # ── Commit-type classifier ────────────────────────────────────────────────────
 _COMMIT_RE = re.compile(
@@ -93,6 +96,7 @@ class LibrarianService:
         """
         Main entry point. Returns the graph fast; kicks off background work.
         """
+        print(f"\n[Librarian:Process] Processing repo: {input_source} (branch: {branch}, force: {force})")
         # 1. Resolve source
         if input_source.startswith("http"):
             project_root = self._clone_or_pull(input_source, branch)
@@ -101,14 +105,20 @@ class LibrarianService:
             project_root = input_source
             project_name = os.path.basename(project_root.rstrip("/\\"))
             branch = "local"
+        
+        print(f"[Librarian:Process] Target directory: {project_root}")
 
         if not os.path.isdir(project_root):
+            print(f"[Librarian:Process] Error: Path not found {project_root}")
             raise ValueError(f"Path does not exist or is not a directory: {project_root}")
 
         # 2. Check cache (instant return — no background work needed)
         cache_file = os.path.join(project_root, "_kachow_graph.json")
         if not force and os.path.exists(cache_file):
+            print(f"[Librarian:Process] Cache HIT for {project_name}. Returning instantly.")
             return self._load_from_cache(cache_file)
+
+        print(f"[Librarian:Process] Cache MISS or force=true. Starting full scan.")
 
         alert_system.add_alert(
             title=f"🔍 Scanning: {project_name}",
@@ -163,9 +173,11 @@ class LibrarianService:
             repo_path = input_source
 
         if not os.path.isdir(repo_path):
+            print(f"[Librarian:History] Repo path not found: {repo_path}")
             return []
         try:
-            repo = Repo(repo_path, search_parent_dirs=True)
+            print(f"[Librarian:History] Fetching {max_count} commits from {repo_path}")
+            repo = Repo(repo_path, search_parent_directories=True)
             result = []
             for c in repo.iter_commits(max_count=max_count):
                 msg = c.message.strip().split("\n")[0]
@@ -176,10 +188,74 @@ class LibrarianService:
                     date=c.committed_datetime.strftime("%b %d, %Y · %H:%M"),
                     commit_type=_classify_commit(msg),
                 ))
+            print(f"[Librarian:History] Found {len(result)} commits")
             return result
         except (InvalidGitRepositoryError, Exception) as e:
-            print(f"[Librarian] git history error: {e}")
+            print(f"[Librarian:History] Git error: {e}")
+            traceback.print_exc()
             return []
+
+    def sync_github(self, input_source: str, max_count: int = 15) -> GithubSyncResult:
+        """Fetch commits from local clone + Pull Requests from GitHub API."""
+        print(f"\n[Librarian:Sync] Starting sync for: {input_source}")
+        commits = self.get_commit_history(input_source, max_count=max_count)
+        
+        repo_url = input_source
+        if not repo_url.startswith("http"):
+            try:
+                repo = Repo(input_source, search_parent_directories=True)
+                repo_url = list(repo.remotes.origin.urls)[0]
+                print(f"[Librarian:Sync] Resolved local path to URL: {repo_url}")
+            except Exception as e:
+                print(f"[Librarian:Sync] Could not resolve remote URL from local path: {e}")
+                repo_url = ""
+
+        prs = []
+        # Support github urls specifically for PR fetching
+        if "github.com" in repo_url:
+            parts = repo_url.replace(".git", "").split("/")
+            if len(parts) >= 2:
+                owner, repo_name = parts[-2], parts[-1]
+                api_url = f"https://api.github.com/repos/{owner}/{repo_name}/pulls?state=all&per_page=10"
+                print(f"[Librarian:Sync] Fetching PRs from GitHub API: {api_url}")
+                
+                try:
+                    req = urllib.request.Request(api_url, headers={"User-Agent": "KA-CHOW-Librarian"})
+                    token = os.environ.get("GITHUB_TOKEN")
+                    if token:
+                         print("[Librarian:Sync] Using GITHUB_TOKEN for authentication")
+                         req.add_header("Authorization", f"Bearer {token}")
+                    else:
+                         print("[Librarian:Sync] No GITHUB_TOKEN found, performing unauthenticated request")
+
+                    with urllib.request.urlopen(req, timeout=5) as resp:
+                        print(f"[Librarian:Sync] GitHub API Response: {resp.status}")
+                        data = json.loads(resp.read().decode())
+                        for pr in data:
+                            prs.append(PullRequestInfo(
+                                id=pr.get("id", 0),
+                                number=pr.get("number", 0),
+                                title=pr.get("title", "Unknown"),
+                                state=pr.get("state", "unknown"),
+                                author=pr.get("user", {}).get("login", "Unknown"),
+                                created_at=pr.get("created_at", ""),
+                                url=pr.get("html_url", ""),
+                            ))
+                        print(f"[Librarian:Sync] Found {len(prs)} PRs")
+                except urllib.error.HTTPError as e:
+                    print(f"[Librarian:Sync] GitHub API Error {e.code}: {e.read().decode()}")
+                except Exception as e:
+                    print(f"[Librarian:Sync] Failed to fetch PRs: {e}")
+                    traceback.print_exc()
+        else:
+            print("[Librarian:Sync] Not a GitHub repository URL, skipping PR fetch.")
+                    
+        message = f"Synced {len(commits)} commits and {len(prs)} pull requests."
+        if not prs and "github.com" not in repo_url:
+             message = f"Synced {len(commits)} commits. (Not a GitHub remote, PRs skipped)."
+        
+        print(f"[Librarian:Sync] Finished. {message}\n")
+        return GithubSyncResult(commits=commits, pull_requests=prs, message=message)
 
     def incremental_update(self, input_source: str) -> dict:
         """
@@ -221,6 +297,7 @@ class LibrarianService:
         # ── 3. Get changed files via git diff ─────────────────────────────────
         changed_files: List[str] = []
         try:
+            print(f"[Librarian:Incremental] Running git diff in {project_root}")
             result = subprocess.run(
                 ["git", "diff", "--name-only", "--diff-filter=ACM", "HEAD~1", "HEAD"],
                 cwd=project_root,
@@ -234,8 +311,9 @@ class LibrarianService:
                 and any(f.strip().endswith(ext) for ext in settings.SUPPORTED_EXTENSIONS)
             ]
             changed_files = raw_changed
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            # git not available or no history — do nothing
+            print(f"[Librarian:Incremental] Detected {len(changed_files)} changed files: {changed_files}")
+        except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+            print(f"[Librarian:Incremental] Git diff failed: {e}")
             changed_files = []
 
         if not changed_files:
@@ -504,7 +582,7 @@ class LibrarianService:
                     severity="info",
                 )
             except Exception as e:
-                print(f"[Librarian:background] error: {e}")
+                print(f"[Librarian:Background] Error: {e}")
                 alert_system.add_alert(
                     title="⚠️ Background Task Warning",
                     message=f"Non-critical background processing failed: {e}",
@@ -560,11 +638,11 @@ class LibrarianService:
                 repo.remotes.origin.fetch()
                 repo.git.checkout(branch)
                 repo.remotes.origin.pull(branch)
-                print(f"[Librarian] updated {repo_name}@{branch}")
+                print(f"[Librarian:Clone] Updated {repo_name}@{branch}")
             except Exception as e:
-                print(f"[Librarian] pull failed, using existing clone: {e}")
+                print(f"[Librarian:Clone] Pull failed, using existing clone: {e}")
         else:
-            print(f"[Librarian] cloning {repo_name}@{branch}…")
+            print(f"[Librarian:Clone] Cloning {repo_name}@{branch}...")
             # shallow clone: only latest commit — much faster for large repos
             Repo.clone_from(url, target, branch=branch, depth=1)
 

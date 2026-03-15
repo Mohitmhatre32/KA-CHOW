@@ -5,7 +5,7 @@ import traceback
 from typing import Optional, List
 from fastapi import APIRouter, HTTPException, Query
 
-from .models import ProcessRequest, GraphResponse, CommitInfo, IncrementalUpdateRequest
+from .models import ProcessRequest, GraphResponse, CommitInfo, IncrementalUpdateRequest, GithubSyncResult
 from .service import librarian
 
 router = APIRouter()
@@ -13,6 +13,7 @@ router = APIRouter()
 
 @router.post("/process", response_model=GraphResponse, summary="Load & process a repository")
 async def process_repository(request: ProcessRequest):
+    print(f"\n[Router] POST /librarian/process -> source={request.input_source}")
     """
     **Stage 1 of every workflow.**
 
@@ -39,6 +40,7 @@ async def process_repository(request: ProcessRequest):
 
 @router.get("/branches", summary="List remote branches without cloning")
 async def get_branches(repo_url: str = Query(..., description="GitHub repository URL")):
+    print(f"\n[Router] GET /librarian/branches -> url={repo_url}")
     """Quickly lists all remote branches using git ls-remote."""
     try:
         branches = librarian.get_branches(repo_url)
@@ -56,11 +58,30 @@ async def get_file_content(full_path: str = Query(..., description="Absolute pat
     return {"content": content, "path": full_path}
 
 
+@router.get("/sync-github", response_model=GithubSyncResult, summary="Sync commits and Pull Requests")
+async def sync_github_data(
+    input_source: str = Query(..., description="Repo URL or local path"),
+    max_count: int = Query(15, ge=1, le=50),
+):
+    print(f"\n[Router] GET /librarian/sync-github -> source={input_source}")
+    """
+    Fast-sync endpoint for GitHub data.
+    Retrieves commits instantly from local git history.
+    Fetches latest Pull Requests directly from the GitHub API.
+    """
+    try:
+        return librarian.sync_github(input_source, max_count=max_count)
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"GitHub sync failed: {e}")
+
+
 @router.get("/history", response_model=List[CommitInfo], summary="Recent git commits")
 async def get_commit_history(
     input_source: str = Query(..., description="Repo URL or local path"),
     max_count: int = Query(15, ge=1, le=50),
 ):
+    print(f"\n[Router] GET /librarian/history -> source={input_source}")
     """Returns the last N commits with type classification (feat/fix/chore…)."""
     try:
         return librarian.get_commit_history(input_source, max_count=max_count)

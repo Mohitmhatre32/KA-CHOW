@@ -1,5 +1,6 @@
 """
 KA-CHOW Rebackend — FastAPI Application Entry Point
+# Triggering reload for GitHub Sync integration
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -48,9 +49,17 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 # ── Core Endpoints ────────────────────────────────────────────────────────────
 
+@app.on_event("startup")
+async def startup_event():
+    print(f"\n{'='*50}")
+    print(f"STARTUP: KA-CHOW API v{settings.VERSION} is starting up...")
+    print(f"Environment: {settings.APP_ENV}")
+    print(f"{'='*50}\n")
+
 @app.get("/health", tags=["System"], summary="Health check")
 def health():
     """Used by Docker HEALTHCHECK and load balancers."""
+    print("[System] GET /health - Checking system status")
     return {
         "status": "ONLINE",
         "version": settings.VERSION,
@@ -115,21 +124,6 @@ def trigger_scan(project_root: str):
 
 
 # ── GitHub OAuth Stubs ────────────────────────────────────────────────────────
-
-@app.get("/api/github/client-id", tags=["GitHub"], summary="GitHub OAuth client ID (stub)")
-def github_client_id():
-    """Safe stub — prevents 404 on frontend GitHub OAuth flow."""
-    return {"client_id": ""}
-
-
-@app.post("/api/github/token", tags=["GitHub"], summary="Exchange GitHub OAuth code (stub)")
-def github_token(body: dict = {}):
-    return {"access_token": ""}
-
-
-@app.post("/api/github/repos", tags=["GitHub"], summary="List GitHub repos (stub)")
-def github_repos(body: dict = {}):
-    return []
 
 
 # ── Generate Docs Compatibility ───────────────────────────────────────────────

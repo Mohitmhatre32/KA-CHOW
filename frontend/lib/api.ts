@@ -3,7 +3,7 @@
  * Base URL: http://localhost:8000 (set via NEXT_PUBLIC_API_URL)
  */
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 
 // ─── Generic HTTP Helpers ──────────────────────────────────────────────────────
 
@@ -22,11 +22,11 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 }
 
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    method: "GET",
-    headers: { "Content-Type": "application/json" },
-  })
+  const url = `${BASE_URL}${path}`
+  console.log(`[API] GET ${url}`)
+  const res = await fetch(url)
   if (!res.ok) {
+    console.error(`[API] GET ${url} failed with status ${res.status}`)
     const error = await res.json().catch(() => ({ detail: res.statusText }))
     const detail = typeof error.detail === "object" ? JSON.stringify(error.detail, null, 2) : error.detail
     throw new Error(detail || `Request failed: ${res.status}`)
@@ -152,6 +152,32 @@ export async function getHistory(repoUrl: string): Promise<CommitInfo[]> {
   )
 }
 
+export interface PullRequestInfo {
+  id: number
+  number: number
+  title: string
+  state: string
+  author: string
+  created_at: string
+  url: string
+}
+
+export interface GithubSyncResult {
+  commits: CommitInfo[]
+  pull_requests: PullRequestInfo[]
+  message: string
+}
+
+/**
+ * Fetches real-time commits and Pull Requests directly from GitHub + local git.
+ * Endpoint: GET /api/librarian/sync-github
+ */
+export async function syncGithub(repoUrl: string): Promise<GithubSyncResult> {
+  return get<GithubSyncResult>(
+    `/api/librarian/sync-github?input_source=${encodeURIComponent(repoUrl)}`
+  )
+}
+
 /**
  * Triggers a stub scan (SonarQube deferred).
  * Endpoint: POST /api/scan/trigger
@@ -208,9 +234,12 @@ export interface ImpactAnalysisRequest {
 }
 
 export interface ImpactResult {
+  impacted_files: { file_path: string; severity: string; reason: string }[]
+  total_impacted: number
+  blast_radius_depth: number
   severity: "high" | "medium" | "low"
-  affected_services: { name: string; reason: string; severity: string }[]
   summary: string
+  scenario_explanation?: string
 }
 
 export interface JiraTicketData {
@@ -230,20 +259,19 @@ export interface JiraCreateTasksRequest {
  * Endpoint: POST /api/architect/impact
  */
 export async function architectAnalyzeImpact(req: ImpactAnalysisRequest): Promise<ImpactResult> {
-  const data = await post<{
-    impacted_files: { file_path: string; severity: string; reason: string }[]
-    total_impacted: number
-    blast_radius_depth: number
-  }>("/api/architect/impact", {
+  const data = await post<ImpactResult>("/api/architect/impact", {
     project_name: req.repo_url.split("/").pop()?.replace(".git", "") || "project",
     target_file: req.target_endpoint,
     proposed_change: req.proposed_change,
   })
-  const highest = data.impacted_files.find(f => f.severity === "high") || data.impacted_files[0]
+  
+  // Ensure we have a top-level severity and summary for the UI if not already there
+  const highestSvc = data.impacted_files.find(f => f.severity === "high") || data.impacted_files[0]
   return {
-    severity: (highest?.severity as "high" | "medium" | "low") || "low",
-    affected_services: data.impacted_files.map(f => ({ name: f.file_path, reason: f.reason, severity: f.severity })),
+    ...data,
+    severity: (highestSvc?.severity as "high" | "medium" | "low") || "low",
     summary: `${data.total_impacted} files affected at depth ${data.blast_radius_depth}`,
+    scenario_explanation: data.scenario_explanation
   }
 }
 

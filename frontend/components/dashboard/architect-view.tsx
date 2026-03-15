@@ -242,6 +242,7 @@ export function ArchitectView() {
     const [isContentLoading, setIsContentLoading] = useState(false)
 
     // ── Impact analyzer state ──
+    const [targetFile, setTargetFile] = useState("")
     const [proposedChange, setProposedChange] = useState("")
     const [impactLoading, setImpactLoading] = useState(false)
     const [impactResult, setImpactResult] = useState<ImpactResult | null>(null)
@@ -291,7 +292,7 @@ export function ArchitectView() {
         setJiraSuccess(null)
         
         try {
-            const tasks = impactResult.affected_services.map(s => `Fix/Verify impact in ${s.name} [Reason: ${s.reason}]`)
+            const tasks = impactResult.impacted_files.map(s => `Fix/Verify impact in ${s.file_path} [Reason: ${s.reason}]`)
             const res = await createJiraTasks(jiraKeyInput.trim(), tasks)
             setJiraSuccess(res.message)
         } catch (e: unknown) {
@@ -330,7 +331,7 @@ export function ArchitectView() {
         setError(null)
         try {
             const result = await architectAnalyzeImpact({
-                target_endpoint: "root", // Passed statically as root so backend handles it globally
+                target_endpoint: targetFile || "root", 
                 proposed_change: proposedChange,
                 repo_url: activeRepo.repo_url,
             })
@@ -639,6 +640,20 @@ export function ArchitectView() {
 
                         {/* Controls row */}
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                            {/* Target File/Endpoint */}
+                            <div className="flex-[0.4]">
+                                <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-wider text-zinc-600">
+                                    Target File / Endpoint (Optional)
+                                </label>
+                                <input
+                                    type="text"
+                                    value={targetFile}
+                                    onChange={(e) => setTargetFile(e.target.value)}
+                                    className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5 font-mono text-xs text-zinc-300 outline-none transition-colors focus:border-cyan-500/40"
+                                    placeholder="e.g. app/main.py"
+                                />
+                            </div>
+
                             {/* Proposed Change Scenario */}
                             <div className="flex-1">
                                 <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-wider text-zinc-600">
@@ -673,34 +688,68 @@ export function ArchitectView() {
                         {impactResult && (
                             <div className="mt-5 space-y-4">
                                 {/* High impact banner */}
-                                <div
-                                    className="flex items-start gap-4 rounded-xl border border-destructive/30 bg-destructive/5 px-5 py-4 backdrop-blur-md shadow-[inset_0_0_40px_rgba(var(--destructive),0.05)]"
-                                >
-                                    <ShieldAlert className="mt-0.5 h-6 w-6 shrink-0 text-destructive" />
-                                    <div className="flex-1">
-                                        <p className="font-mono text-base font-bold uppercase tracking-tight text-destructive">
-                                            ⚠ High Impact Detected
-                                        </p>
-                                        <p className="mt-1 font-mono text-[11px] leading-relaxed text-muted-foreground opacity-80">
-                                            {impactResult.summary}
-                                        </p>
+                                {impactResult.severity === "high" && impactResult.total_impacted > 0 ? (
+                                    <div
+                                        className="flex items-start gap-4 rounded-xl border border-rose-500/30 bg-rose-500/5 px-5 py-4 backdrop-blur-md shadow-[inset_0_0_40px_rgba(244,63,94,0.05)]"
+                                    >
+                                        <ShieldAlert className="mt-0.5 h-6 w-6 shrink-0 text-rose-500" />
+                                        <div className="flex-1">
+                                            <p className="font-mono text-base font-bold uppercase tracking-tight text-rose-500">
+                                                ⚠ High Impact Detected
+                                            </p>
+                                            <p className="mt-1 font-mono text-[11px] leading-relaxed text-muted-foreground opacity-80">
+                                                {impactResult.total_impacted} files affected at depth {impactResult.blast_radius_depth}
+                                            </p>
+                                        </div>
+                                        <Badge variant="outline" className="shrink-0 border-rose-500/40 bg-rose-500/10 font-mono text-[10px] font-bold uppercase tracking-widest text-rose-500">
+                                            {impactResult.severity}
+                                        </Badge>
                                     </div>
-                                    <Badge variant="outline" className="shrink-0 border-destructive/40 bg-destructive/10 font-mono text-[10px] font-bold uppercase tracking-widest text-destructive">
-                                        {impactResult.severity}
-                                    </Badge>
-                                </div>
+                                ) : (
+                                    <div
+                                        className="flex items-start gap-4 rounded-xl border border-zinc-700/30 bg-zinc-800/10 px-5 py-4 backdrop-blur-md"
+                                    >
+                                        <Activity className="mt-0.5 h-6 w-6 shrink-0 text-zinc-400" />
+                                        <div className="flex-1">
+                                            <p className="font-mono text-base font-bold uppercase tracking-tight text-zinc-300">
+                                                Analysis Complete
+                                            </p>
+                                            <p className="mt-1 font-mono text-[11px] leading-relaxed text-muted-foreground opacity-80">
+                                                {impactResult.total_impacted} components analyzed with {impactResult.severity} impact risk.
+                                            </p>
+                                        </div>
+                                        <Badge variant="outline" className={`shrink-0 font-mono text-[10px] font-bold uppercase tracking-widest ${impactResult.severity === "medium" ? "border-amber-500/40 bg-amber-500/10 text-amber-500" : "border-zinc-700 bg-zinc-800 text-zinc-500"}`}>
+                                            {impactResult.severity}
+                                        </Badge>
+                                    </div>
+                                )}
+
+                                {/* Scenario Explanation */}
+                                {impactResult.scenario_explanation && (
+                                    <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+                                        <div className="flex items-start gap-3">
+                                            <Sparkles className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                                            <div>
+                                                <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-primary mb-1">Architectural Insight</p>
+                                                <p className="font-mono text-[11px] leading-relaxed text-muted-foreground whitespace-pre-wrap">
+                                                    {impactResult.scenario_explanation}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
 
                                 {/* Blast radius list */}
                                 <div className="mt-4">
                                     <p className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest mb-3">IMPACTED FILES</p>
                                     <div className="flex flex-col gap-3">
-                                        {impactResult.affected_services.map((svc, i) => (
+                                        {impactResult.impacted_files.map((svc, i) => (
                                             <div
                                                 key={i}
                                                 className="rounded-lg border border-zinc-800/80 bg-[#161b22] p-4 shadow-sm"
                                             >
                                                 <div className="flex items-center justify-between mb-2">
-                                                    <span className="font-mono text-sm font-semibold tracking-tight text-zinc-200">{svc.name}</span>
+                                                    <span className="font-mono text-sm font-semibold tracking-tight text-zinc-200">{svc.file_path}</span>
                                                     <span className={`font-mono text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-sm ${svc.severity === "high" ? "text-rose-500 bg-rose-500/10" : svc.severity === "medium" ? "text-amber-500 bg-amber-500/10" : "text-emerald-500 bg-emerald-500/10"}`}>
                                                         {svc.severity}
                                                     </span>
@@ -716,7 +765,7 @@ export function ArchitectView() {
                                 {/* Export to Jira */}
                                 <Button
                                     onClick={handleCreateJiraTasks}
-                                    disabled={exportingTasks || !jiraKeyInput.trim() || impactResult.affected_services.length === 0}
+                                    disabled={exportingTasks || !jiraKeyInput.trim() || impactResult.impacted_files.length === 0}
                                     className="w-full mt-4 bg-[#0052cc] text-white hover:bg-[#0052cc]/90 gap-2 font-mono text-xs font-bold transition-all"
                                 >
                                     {exportingTasks ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <span>➕</span>}

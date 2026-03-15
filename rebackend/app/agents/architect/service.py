@@ -130,6 +130,7 @@ STRICT: No conversational text. Escape all newlines as '\\n'.
                     current = queue.pop(0)
                     found_in_level = False
                     for edge in graph_data.get("edges", []):
+                        # Find things that depend on 'current'
                         if edge["target"] == current and edge["source"] not in visited:
                             impacted.add(edge["source"])
                             visited.add(edge["source"])
@@ -138,48 +139,87 @@ STRICT: No conversational text. Escape all newlines as '\\n'.
                     if found_in_level:
                         depth += 1
 
+                # If the graph didn't find any dependents, we should still analyze the target file itself
+                # and potentially hypothesize other impacts.
+                if not impacted:
+                    impacted.add(target_file)
+                else:
+                    # Ensure the target file is always analyzed as the epicenter
+                    impacted.add(target_file)
+
                 # Enrich with logic-based reasoning from LLM
                 for path in impacted:
                     reasoning_prompt = f"""
-                    ROLE: Senior System Analyzer.
+                    ROLE: Senior System Architect & Security Expert.
                     CONTEXT: Proposed change "{proposed_change}" to file "{target_file}".
-                    TARGET: Analyzing impact on dependent file "{path}".
+                    TARGET COMPONENT: "{path}".
                     
-                    TASK: Identify why this dependent file is affected and assign severity.
+                    TASK: Analyze the impact of this change on the target component. 
+                    
+                    REQUIREMENTS FOR REASONING:
+                    1. BE DETAILED: Explain the specific technical mechanism of the dependency (e.g., "imports a core class", "relies on specific return type").
+                    2. ANALYZE RISKS: Identify security vulnerabilities, data integrity issues, or performance regressions that may arise.
+                    3. CONTEXTUALIZE: Explain the downstream consequences (e.g., "compromising the security of the entire system").
+                    4. DONT BE VAGUE: Avoid generic phrases like "dependency detected". Be codebase-specific.
                     
                     RETURN ONLY JSON:
-                    {{ "severity": "high/medium/low", "reason": "logic-based explanation" }}
+                    {{ 
+                        "severity": "high/medium/low", 
+                        "reason": "Detailed, logic-based technical explanation (min 30 words)." 
+                    }}
                     """
-                    analysis = generate_json(reasoning_prompt, "You are a professional software architect.")
+                    analysis = generate_json(reasoning_prompt, "You are a senior professional software architect.")
                     
                     impact_nodes.append(ImpactNode(
                         file_path=path,
                         severity=analysis.get("severity", "medium"),
-                        reason=analysis.get("reason", "Direct dependency detected in knowledge graph.")
+                        reason=analysis.get("reason", f"Impact detected in {path} due to dependency on {target_file} in the architectural graph.")
                     ))
+                
+                # Sort by severity (high first) and limit to top 5 for file-targeted
+                impact_nodes.sort(key=lambda x: x.severity == "high", reverse=True)
+                impact_nodes = impact_nodes[:5]
+
+                # Final depth adjustment: if we have impacted nodes but depth was 0, set to 1
+                if not depth and impact_nodes:
+                    depth = 1
             else:
                 # Global Scenario Analysis (target_file is 'root' or empty)
                 all_nodes = [node["id"] for node in graph_data.get("nodes", [])]
                 all_nodes_str = "\\n".join(all_nodes[:50]) # cap at 50 for token limits
                 
                 global_prompt = f"""
-                ROLE: Senior System Analyzer.
-                CONTEXT: The user proposed a global architectural scenario / change: "{proposed_change}".
+                ROLE: Senior System Architect & Infrastructure Lead.
+                CONTEXT: The user proposed a global architectural scenario: "{proposed_change}".
                 
-                PROJECT FILES (Sample subset):
+                PROJECT STRUCTURE (Nodes):
                 {all_nodes_str}
                 
-                TASK: Identify exactly which components or files (up to 3 most critical ones) would be significantly impacted by this global change and explain why in a detailed and concise manner.
+                TASK:
+                1. Identify exactly which components or files (top 3) would be most critically impacted.
+                2. For each, provide a deep-dive "reason" explaining the technical impact, integration risks, and architectural drift potential.
+                3. Provide a high-level "scenario_explanation" that summarizes the overall systemic risk for stakeholders.
                 
-                RETURN ONLY JSON IN EXACT FORMAT:
+                GUIDELINES:
+                - Use professional, high-agency language.
+                - Focus on technical causality (e.g., how A affects B).
+                - Identify "silent failures" or subtle regressions that might be missed by simple grep.
+                
+                RETURN ONLY JSON:
                 {{
                     "impacted_files": [
-                        {{ "file_path": "filename_or_component", "severity": "high/medium/low", "reason": "Detailed logic-based explanation." }}
-                    ]
+                        {{ 
+                            "file_path": "filename_or_module", 
+                            "severity": "high/medium/low", 
+                            "reason": "Detailed architectural analysis of the impact." 
+                        }}
+                    ],
+                    "scenario_explanation": "Overall systemic impact summary focusing on architectural integrity."
                 }}
                 """
-                analysis = generate_json(global_prompt, "You are a professional software architect.")
+                analysis = generate_json(global_prompt, "You are a senior professional software architect.")
                 impact_list = analysis.get("impacted_files", [])
+                scenario_explanation = analysis.get("scenario_explanation", "Global architectural change identified with broad systemic impact.")
                 
                 for item in impact_list:
                     impact_nodes.append(ImpactNode(
@@ -190,10 +230,26 @@ STRICT: No conversational text. Escape all newlines as '\\n'.
                 
                 depth = 1 # Global changes affect the first structural layer intrinsically
 
+            # Post-processing: For file-targeted analysis, synthesize a high-level explanation
+            if target_file and target_file not in ["root", "global", ""] and impact_nodes:
+                impact_summary_data = [f"- {node.file_path}: {node.reason}" for node in impact_nodes[:5]]
+                synthesis_prompt = f"""
+                ROLE: Senior Software Architect.
+                CONTEXT: Change "{proposed_change}" to "{target_file}".
+                IMPACTED COMPONENTS:
+                {"\\n".join(impact_summary_data)}
+                
+                TASK: Synthesize the overall blast radius into a 2-3 sentence executive summary explaining the primary architectural risk or impact.
+                """
+                scenario_explanation = generate_text(synthesis_prompt)
+            elif not impact_nodes:
+                scenario_explanation = "No significant blast radius detected for this proposed change."
+
             return ImpactResponse(
                 impacted_files=impact_nodes,
                 total_impacted=len(impact_nodes),
-                blast_radius_depth=depth
+                blast_radius_depth=depth,
+                scenario_explanation=scenario_explanation
             )
 
         except Exception as e:
