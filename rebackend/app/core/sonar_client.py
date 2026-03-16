@@ -1,8 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# sonar_client.py  ← SonarQube integration (COMMENTED OUT — not in use)
-#
-# To re-enable: uncomment everything below and ensure SonarQube is running
-# locally on http://localhost:9000 with a valid SONAR_TOKEN in .env
+# sonar_client.py  ← SonarQube integration
 # ─────────────────────────────────────────────────────────────────────────────
 
 import os
@@ -19,32 +16,61 @@ class SonarQubeClient:
     def run_scanner(self, project_path: str, project_key: str):
         """
         Runs the official SonarScanner via Docker on the given project directory.
+        Includes optimizations for speed and exclusion of noise files.
         """
-        print(f"\n🚀 Triggering ACTUAL SonarQube Scanner for '{project_key}'...")
-        print("⏳ Please wait ~15-30 seconds for the deep analysis to complete...")
+        print(f"\n🚀 Triggering OPTIMIZED SonarQube Scanner for '{project_key}'...")
+        print("⏳ Please wait ~10-20 seconds for the focused analysis to complete...")
 
         # On Windows Docker, containers access the host's localhost via 'host.docker.internal'
         sonar_host = self.base_url.replace("localhost", "host.docker.internal").replace("127.0.0.1", "host.docker.internal")
 
-        # Build the Docker command
+        # Define exclusions to make scanning "really fast"
+        # package.json and .env were explicitly requested. node_modules and venv are standard noise.
+        exclusions = [
+            "**/node_modules/**",
+            "**/venv/**",
+            "**/.venv/**",
+            "**/__pycache__/**",
+            "**/dist/**",
+            "**/build/**",
+            "**/.git/**",
+            "**/coverage/**",
+            "**/.next/**",
+            "**/.idea/**",
+            "**/.vscode/**",
+            "package-lock.json",
+            "yarn.lock",
+            "bun.lockb",
+            ".env",
+            "package.json"
+        ]
+
+        # Build the Docker command with performance tweaks
         cmd = [
             "docker", "run", "--rm",
             "-v", f"{os.path.abspath(project_path)}:/usr/src",
+            # Add a volume for the scanner cache to speed up subsequent runs
+            "-v", "sonar_scanner_cache:/opt/sonar-scanner/.sonar/cache",
             "sonarsource/sonar-scanner-cli",
             f"-Dsonar.projectKey={project_key}",
             "-Dsonar.sources=.",
             f"-Dsonar.host.url={sonar_host}",
-            f"-Dsonar.login={self.token}"
+            f"-Dsonar.login={self.token}",
+            f"-Dsonar.exclusions={','.join(exclusions)}",
+            # Optimization: Increase memory for JS/TS analysis
+            "-Dsonar.javascript.node.maxspace=4096",
+            # Optimization: Disable SCM sensor to save time if we don't need blame info
+            "-Dsonar.scm.disabled=true",
         ]
 
         try:
-            subprocess.run(cmd, check=True, capture_output=True, text=True)
+            subprocess.run(cmd, check=True, text=True)
             print("✅ SonarScanner finished pushing data to server!")
-            print("⏳ Waiting 5 seconds for SonarQube Compute Engine to finalize...")
-            time.sleep(5)
+            print("⏳ Waiting 3 seconds for SonarQube Compute Engine to finalize...")
+            time.sleep(3)
             return True
         except subprocess.CalledProcessError as e:
-            print(f"❌ Scanner Failed. Error: {e.stderr}")
+            print(f"❌ Scanner Failed. Error: {e}")
             return False
 
     def get_file_metrics(self, file_path: str, project_key: str):
