@@ -28,8 +28,8 @@ const typeColors: Record<GraphNode["type"], string> = {
   utility: "var(--warning)",
   api: "var(--destructive)",
   hook: "var(--accent)",
-  file: "var(--muted-foreground)",
-  folder: "var(--border)",
+  file: "#ec4899", // Changed to bright pink
+  folder: "#8b5cf6", // Changed to bright purple
 }
 
 const typeLabels: Record<GraphNode["type"], string> = {
@@ -409,16 +409,18 @@ export function GraphView() {
 
         {/* Edges */}
         {edges.map((edge, i) => {
-          const isHighlighted = activeNodeId === edge.fromId || activeNodeId === edge.toId
           const isConnectedToSelected = selectedNodeId === edge.fromId || selectedNodeId === edge.toId
+          const isConnectedToActive = activeNodeId === edge.fromId || activeNodeId === edge.toId
+          const isDimmed = activeNodeId !== null && !isConnectedToActive
+
           return (
             <line
               key={i} x1={edge.x1} y1={edge.y1} x2={edge.x2} y2={edge.y2}
-              stroke={isHighlighted ? "var(--primary)" : "var(--border)"}
-              strokeWidth={isHighlighted ? (isConnectedToSelected ? 3 : 2) : 1}
-              strokeOpacity={isHighlighted ? 0.9 : 0.4}
-              strokeDasharray={isHighlighted ? "none" : "4 4"}
-              className={`${isHighlighted ? 'drop-shadow-[0_0_8px_rgba(88,166,255,0.8)]' : ''} transition-all duration-300`}
+              stroke={isConnectedToSelected ? "#3b82f6" : "#ffffff"}
+              strokeWidth={isConnectedToSelected ? 3 : 1.5}
+              strokeOpacity={isDimmed ? 0.1 : (isConnectedToSelected ? 1 : 0.6)}
+              strokeDasharray="4 4"
+              className={`${isConnectedToSelected ? 'drop-shadow-[0_0_10px_rgba(59,130,246,1)]' : ''} transition-all duration-300`}
             />
           )
         })}
