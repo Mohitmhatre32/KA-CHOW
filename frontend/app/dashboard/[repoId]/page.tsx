@@ -114,8 +114,8 @@ export default function DashboardPage() {
     setIsScanning(true)
     try {
       await triggerSonarScan(activeRepoUrl)
-      // Refresh the repository data to update the graph and metrics
-      const data = await analyzeRepository(activeRepoUrl, activeRepoBranch || "main")
+      // Refresh the repository data to update the graph and metrics (force=true to bust backend cache)
+      const data = await analyzeRepository(activeRepoUrl, activeRepoBranch || "main", true)
       const newId = upsertRepo(activeRepoUrl, data)
       setActiveRepoId(newId)
       // Dispatch event to notify components like HealthPanel

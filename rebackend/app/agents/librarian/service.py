@@ -388,85 +388,6 @@ class LibrarianService:
             "message": msg
         }
 
-    def run_sonar_scan(self, repo_url: str) -> dict:
-        """
-        Task 4: Real-time SonarQube project scan.
-
-        Fast path  : returns cached SonarQube metrics immediately (< 1s).
-        Background : fires the actual Docker scanner in a daemon thread.
-                     When it finishes, the graph cache is hot-patched with
-                     fresh metrics — the next graph fetch returns updated data.
-        """
-        from app.core.sonar_client import sonar
-
-        # 1. Resolve project path
-        if repo_url.startswith("http"):
-            repo_name = repo_url.rstrip("/").split("/")[-1].replace(".git", "")
-            project_root = os.path.join(settings.REPO_STORAGE_PATH, repo_name)
-        else:
-            project_root = repo_url
-            repo_name = os.path.basename(project_root.rstrip("/\\"))
-
-        if not os.path.isdir(project_root):
-            raise ValueError(f"Project path not found: {project_root}")
-
-        # 2. Return current cached metrics immediately (no Docker wait)
-        cached_metrics = sonar.get_project_metrics(repo_name)
-        print(f"[Librarian:Sonar] Returning cached metrics for '{repo_name}'. Docker scan starting in background...")
-
-        alert_system.add_alert(
-            title="🔍 Sonar Scan Queued",
-            message=f"Background scan started for '{repo_name}'. Metrics will refresh automatically when complete.",
-            severity="info",
-        )
-
-        # 3. Background: run Docker scanner + hot-patch cache
-        def _bg_scan():
-            print(f"[Librarian:Sonar] Background scan starting for {repo_name}...")
-            scan_success = sonar.run_scanner(project_root, repo_name)
-
-            if not scan_success:
-                alert_system.add_alert(
-                    title="⚠️ Sonar Scan Warning",
-                    message=f"Scanner did not complete cleanly for '{repo_name}'. Metrics may be partial.",
-                    severity="warning",
-                )
-                return
-
-            # Hot-patch: update graph cache with fresh per-file metrics
-            metrics = sonar.get_project_metrics(repo_name)
-            cache_file = os.path.join(project_root, "_kachow_graph.json")
-            if os.path.exists(cache_file):
-                try:
-                    with open(cache_file, "r", encoding="utf-8") as f:
-                        graph_data = json.load(f)
-
-                    for node in graph_data.get("nodes", []):
-                        if node.get("type") == "file":
-                            node["sonar_health"] = sonar.get_file_metrics(node["id"], repo_name)
-
-                    with open(cache_file, "w", encoding="utf-8") as f:
-                        json.dump(graph_data, f, default=str)
-
-                    print(f"[Librarian:Sonar] Graph cache updated with fresh metrics for '{repo_name}'")
-                except Exception as e:
-                    print(f"[Librarian:Sonar] Cache hot-patch failed: {e}")
-
-            alert_system.add_alert(
-                title="✅ Sonar Scan Complete",
-                message=f"'{repo_name}' scan finished. Quality gate: {metrics.get('quality_gate', 'PASSED')}. Refresh the graph to see updated metrics.",
-                severity="success" if metrics.get("quality_gate") == "OK" else "warning",
-            )
-
-        t = threading.Thread(target=_bg_scan, daemon=True, name=f"sonar-scan-{repo_name}")
-        t.start()
-        print(f"[Librarian:Sonar] Background scan thread started: {t.name}")
-
-        return {
-            "status": "scanning",
-            "project_metrics": cached_metrics,
-            "message": f"Scan queued for '{repo_name}'. Current cached metrics returned. Refresh graph in ~2-3 minutes for updated data.",
-        }
 
 
     # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -937,7 +858,7 @@ Output ONLY markdown."""
             return msg
 
 
-    def trigger_sonar_scan(self, repo_url: str) -> dict:
+    def run_sonar_scan(self, repo_url: str) -> dict:
         """
         Runs SonarQube scan on the repository and updates file-level health in the graph.
         """
