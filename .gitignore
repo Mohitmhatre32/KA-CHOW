@@ -95,3 +95,4 @@ node_modules/
 .env*.local
 .DS_Store
 .idea/
+.vscode/
