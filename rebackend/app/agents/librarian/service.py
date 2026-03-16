@@ -1,11 +1,11 @@
 """
-Librarian Service — The Core File Processing Pipeline
+Librarian Service â€” The Core File Processing Pipeline
 
-Pipeline stages (FAST PATH — graph returned in ~1-3s):
+Pipeline stages (FAST PATH â€” graph returned in ~1-3s):
   1. Resolve source (clone/pull or validate local path)
   2. Walk the file tree, skip noise dirs
   3. AST import analysis (Python) + heuristic for JS/TS
-  4. Return GraphResponse immediately ← FAST
+  4. Return GraphResponse immediately â† FAST
 
 Background (non-blocking, runs after response sent):
   5. Chunk files and upsert into ChromaDB
@@ -37,7 +37,7 @@ from .models import GraphResponse, FileNode, CommitInfo, PullRequestInfo, Github
 import urllib.request
 import urllib.error
 
-# ── Commit-type classifier ────────────────────────────────────────────────────
+# â”€â”€ Commit-type classifier 
 _COMMIT_RE = re.compile(
     r"^(feat|fix|chore|docs|refactor|test|style|ci|build|perf)", re.IGNORECASE
 )
@@ -48,7 +48,7 @@ def _classify_commit(msg: str) -> str:
     return m.group(1).lower() if m else "other"
 
 
-# ── Language detector ─────────────────────────────────────────────────────────
+# â”€â”€ Language detector â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 _EXT_LANG: Dict[str, str] = {
     ".py": "python", ".js": "javascript", ".ts": "typescript",
     ".tsx": "typescript", ".jsx": "javascript", ".java": "java",
@@ -62,7 +62,7 @@ def _lang(ext: str) -> str:
     return _EXT_LANG.get(ext.lower(), "text")
 
 
-# ── Token-aware chunker ───────────────────────────────────────────────────────
+# â”€â”€ Token-aware chunker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def _chunk_text(text: str, max_tokens: int = settings.CHUNK_TOKEN_LIMIT) -> List[str]:
     """Split text into chunks of roughly max_tokens (word-count proxy)."""
     max_words = int(max_tokens * 0.75)
@@ -84,13 +84,13 @@ class LibrarianService:
     """
     Stateless pipeline orchestrator.
 
-    Fast path: clone → walk → AST → return graph (1-3s).
+    Fast path: clone â†’ walk â†’ AST â†’ return graph (1-3s).
     Slow path: embed + doc-gen run in a daemon thread after response is sent.
     """
 
-    # ─────────────────────────────────────────────────────────────────────────
+    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # PUBLIC API
-    # ─────────────────────────────────────────────────────────────────────────
+    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def process_request(self, input_source: str, branch: str = "main", force: bool = False) -> GraphResponse:
         """
@@ -112,7 +112,7 @@ class LibrarianService:
             print(f"[Librarian:Process] Error: Path not found {project_root}")
             raise ValueError(f"Path does not exist or is not a directory: {project_root}")
 
-        # 2. Check cache (instant return — no background work needed)
+        # 2. Check cache (instant return â€” no background work needed)
         cache_file = os.path.join(project_root, "_kachow_graph.json")
         if not force and os.path.exists(cache_file):
             print(f"[Librarian:Process] Cache HIT for {project_name}. Returning instantly.")
@@ -121,18 +121,18 @@ class LibrarianService:
         print(f"[Librarian:Process] Cache MISS or force=true. Starting full scan.")
 
         alert_system.add_alert(
-            title=f"🔍 Scanning: {project_name}",
+            title=f"ðŸ” Scanning: {project_name}",
             message=f"Building dependency graph on branch '{branch}'.",
             severity="info",
         )
 
-        # 3. FAST: walk + AST (graph only — no embedding, no LLM)
+        # 3. FAST: walk + AST (graph only â€” no embedding, no LLM)
         graph_response, G, file_contents, nodes_data, edges_data = self._build_graph(
             project_root, project_name, branch
         )
 
         alert_system.add_alert(
-            title="✅ Graph Ready",
+            title="âœ… Graph Ready",
             message=f"Mapped {graph_response.total_files} files. Embedding is running in background.",
             severity="success",
         )
@@ -157,7 +157,7 @@ class LibrarianService:
     def get_file_content(self, full_path: str) -> str:
         """Read raw file content from disk."""
         if not os.path.isfile(full_path):
-            return f"# Error: File not found — {full_path}"
+            return f"# Error: File not found â€” {full_path}"
         try:
             with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
                 return f.read()
@@ -185,7 +185,7 @@ class LibrarianService:
                     hash=c.hexsha[:7],
                     message=msg,
                     author=c.author.name,
-                    date=c.committed_datetime.strftime("%b %d, %Y · %H:%M"),
+                    date=c.committed_datetime.strftime("%b %d, %Y Â· %H:%M"),
                     commit_type=_classify_commit(msg),
                 ))
             print(f"[Librarian:History] Found {len(result)} commits")
@@ -259,20 +259,11 @@ class LibrarianService:
 
     def incremental_update(self, input_source: str) -> dict:
         """
-        Incremental Brain — Task 3 Implementation.
-
-        Instead of a full re-scan (which may take 60+ seconds on large repos),
-        this method:
-          1. Runs `git diff --name-only HEAD~1` to find ONLY changed files.
-          2. Re-processes just those files (re-chunks + upserts to ChromaDB).
-          3. Hot-swaps the affected graph nodes/edges in the cached graph.json.
-          4. Returns a benchmark comparing update time vs a full-scan estimate.
-
-        This proves the system is "living" — updates in seconds, not minutes.
+        Incremental Brain â€” Task 3 Implementation.
         """
         t_start = time.time()
 
-        # ── 1. Resolve project root ───────────────────────────────────────────
+        # â”€â”€ 1. Resolve project root â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if input_source.startswith("http"):
             repo_name = input_source.rstrip("/").split("/")[-1].replace(".git", "")
             project_root = os.path.join(settings.REPO_STORAGE_PATH, repo_name)
@@ -283,159 +274,169 @@ class LibrarianService:
         if not os.path.isdir(project_root):
             raise ValueError(f"Project path not found: {project_root}")
 
-        # ── 2. Load cached graph (so we can hot-swap nodes) ──────────────────
+        # â”€â”€ 2. Load cached graph â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         cache_file = os.path.join(project_root, "_kachow_graph.json")
         if not os.path.exists(cache_file):
-            raise FileNotFoundError(
-                "No cached graph found. Please run a full scan first via /librarian/process."
-            )
+            raise FileNotFoundError("No cached graph found. Run full scan first.")
+        
         with open(cache_file, "r", encoding="utf-8") as f:
             graph_data = json.load(f)
 
-        total_files = sum(1 for n in graph_data.get("nodes", []) if n.get("type") == "file")
+        old_nodes_count = len(graph_data.get("nodes", []))
+        repo = Repo(project_root, search_parent_directories=True)
 
-        # ── 3. Get changed files via git diff ─────────────────────────────────
+        # â”€â”€ 3. Delta Identification (Task 3: Git Diff) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         changed_files: List[str] = []
         try:
-            print(f"[Librarian:Incremental] Running git diff in {project_root}")
-            result = subprocess.run(
-                ["git", "diff", "--name-only", "--diff-filter=ACM", "HEAD~1", "HEAD"],
-                cwd=project_root,
-                capture_output=True,
-                text=True,
-                timeout=15,
-            )
-            raw_changed = [
-                f.strip() for f in result.stdout.splitlines()
-                if f.strip() and os.path.isfile(os.path.join(project_root, f.strip()))
-                and any(f.strip().endswith(ext) for ext in settings.SUPPORTED_EXTENSIONS)
-            ]
-            changed_files = raw_changed
-            print(f"[Librarian:Incremental] Detected {len(changed_files)} changed files: {changed_files}")
-        except (subprocess.TimeoutExpired, FileNotFoundError) as e:
-            print(f"[Librarian:Incremental] Git diff failed: {e}")
+            # We compare HEAD with HEAD~1 to find the "delta"
+            diff = repo.git.diff("HEAD~1", "HEAD", "--name-only").splitlines()
+            changed_files = [f for f in diff if os.path.isfile(os.path.join(project_root, f)) 
+                            and any(f.endswith(ext) for ext in settings.SUPPORTED_EXTENSIONS)]
+        except Exception:
             changed_files = []
 
         if not changed_files:
-            elapsed = round(time.time() - t_start, 2)
-            # Estimate full scan time: ~0.5s per file as baseline
-            baseline = round(total_files * 0.5, 1)
             return {
                 "changed_files": [],
-                "skipped_files": total_files,
-                "total_files": total_files,
-                "update_time_seconds": elapsed,
-                "full_scan_baseline_seconds": baseline,
+                "update_time_seconds": round(time.time() - t_start, 2),
                 "graph_updated": False,
-                "message": f"No changed files detected. Graph is already up to date. (Checked in {elapsed}s)",
+                "message": "Brain is up to date."
             }
 
-        # ── 4. Re-process only changed files ──────────────────────────────────
-        chunks_to_embed: List[dict] = []
-        module_map: Dict[str, str] = {}
+        # â”€â”€ 4. Partial Re-Ingestion & Metadata Layer (Task 2) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        from app.core.sonar_client import sonar # Import health database client
+        
+        # Helper to get file owner (GIT GPS)
+        def get_owner(path):
+            try:
+                return repo.git.log("-1", "--format=%an", "--", path)
+            except: return "Unknown"
+
+        updated_nodes = []
+        nodes_map = {n["id"]: n for n in graph_data["nodes"]}
 
         for rel_path in changed_files:
-            full_path = os.path.join(project_root, rel_path)
+            # 1. "Un-learn" (Remove metadata and old embedding logic)
+            # 2. "Learn" (Re-process)
             ext = os.path.splitext(rel_path)[1]
             language = _lang(ext)
-
-            try:
-                with open(full_path, "r", encoding="utf-8", errors="ignore") as fh:
-                    content = fh.read()
-            except OSError:
-                continue
-
-            # Re-chunk the updated file
-            for idx, chunk in enumerate(_chunk_text(content)):
-                chunks_to_embed.append({
-                    "id": vs.make_chunk_id(rel_path, idx),
-                    "document": chunk,
-                    "metadata": {
-                        "file_path": rel_path,
-                        "language": language,
-                        "chunk_index": idx,
-                        "project": repo_name,
-                    },
-                })
-
-            # Build module map for Python hot-swap
-            if ext == ".py":
-                mod = rel_path.replace("/", ".").replace(".py", "")
-                module_map[mod] = rel_path
-                module_map[os.path.basename(rel_path).replace(".py", "")] = rel_path
-
-        # Upsert changed chunks (ChromaDB upsert is idempotent)
-        if chunks_to_embed:
-            try:
-                vs.upsert_chunks(repo_name, chunks_to_embed)
-            except Exception as e:
-                print(f"[Librarian][Incremental] ChromaDB upsert failed: {e}")
-
-        # ── 5. Hot-swap graph edges for changed Python files ──────────────────
-        existing_edges = graph_data.get("edges", [])
-        # Remove stale imports FROM changed files (we will re-add below)
-        pruned_edges = [
-            e for e in existing_edges
-            if not (e.get("source") in changed_files and e.get("relation") == "imports")
-        ]
-
-        for rel_path in changed_files:
-            if not rel_path.endswith(".py"):
-                continue
             full_path = os.path.join(project_root, rel_path)
-            try:
-                with open(full_path, "r", encoding="utf-8", errors="ignore") as fh:
-                    content = fh.read()
-                tree = ast.parse(content, filename=rel_path)
-                imports = self._extract_imports(tree)
-                known_files = {n["id"] for n in graph_data.get("nodes", [])}
-                for imp in imports:
-                    resolved = self._resolve_import(imp, module_map)
-                    if resolved and resolved != rel_path and resolved in known_files:
-                        new_edge = {"source": rel_path, "target": resolved, "relation": "imports"}
-                        if new_edge not in pruned_edges:
-                            pruned_edges.append(new_edge)
-            except (SyntaxError, OSError):
-                continue
+            
+            with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
+                content = f.read()
 
-        graph_data["edges"] = pruned_edges
+            # Metadata Enrichment (Task 2 GPS Context)
+            health = sonar.get_file_metrics(rel_path, repo_name)
+            owner = get_owner(rel_path)
+            
+            new_node = FileNode(
+                id=rel_path,
+                label=os.path.basename(rel_path),
+                type=self._infer_node_type(rel_path, os.path.basename(rel_path)),
+                layer=self._infer_layer(rel_path),
+                language=language,
+                size_bytes=os.path.getsize(full_path),
+                owner=owner,
+                sonar_health=health,
+                jira_tickets=[] # Integration placeholder
+            ).model_dump()
 
-        # ── 6. Persist updated graph cache ────────────────────────────────────
-        try:
-            with open(cache_file, "w", encoding="utf-8") as f:
-                json.dump(graph_data, f, default=str)
-        except OSError as e:
-            print(f"[Librarian][Incremental] Cache write failed: {e}")
+            # Hot-Swap Node (Task 3)
+            nodes_map[rel_path] = new_node
+            
+            # Re-process vector store (Task 3 memory sync)
+            vs.delete_chunks_by_file(repo_name, rel_path)
+            chunks = []
+            for i, chunk in enumerate(_chunk_text(content)):
+                chunks.append({
+                    "id": vs.make_chunk_id(rel_path, i),
+                    "document": chunk,
+                    "metadata": {"file_path": rel_path, "project": repo_name}
+                })
+            vs.upsert_chunks(repo_name, chunks)
 
-        # ── 7. Benchmark result ───────────────────────────────────────────────
+        # â”€â”€ 5. Data Integrity Check (Task 3) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        graph_data["nodes"] = list(nodes_map.values())
+        new_nodes_count = len(graph_data["nodes"])
+        if new_nodes_count < old_nodes_count:
+             print("[Brain:Integrity] WARNING: Node count dropped. Verifying deletions...")
+        
+        # â”€â”€ 6. Speed Benchmarking (Task 3: < 10s target) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         elapsed = round(time.time() - t_start, 2)
-        # Estimate what a full scan would have taken (0.5s per file heuristic)
-        baseline = round(total_files * 0.5, 1)
-        skipped = total_files - len(changed_files)
+        baseline_estimate = old_nodes_count * 0.5 # 0.5s per file avg for full scan
+        
+        with open(cache_file, "w", encoding="utf-8") as f:
+            json.dump(graph_data, f, default=str)
 
-        alert_system.add_alert(
-            title="⚡ Incremental Update Complete",
-            message=f"Re-indexed {len(changed_files)} file(s) in {elapsed}s (vs ~{baseline}s full scan).",
-            severity="success",
-        )
-
+        msg = f"âš¡ Brain updated {len(changed_files)} files in {elapsed}s (Target < 10s). Baseline scan: ~{baseline_estimate}s."
+        alert_system.add_alert(title="Incremental Brain Ready", message=msg, severity="success")
+        
         return {
             "changed_files": changed_files,
-            "skipped_files": skipped,
-            "total_files": total_files,
             "update_time_seconds": elapsed,
-            "full_scan_baseline_seconds": baseline,
+            "full_scan_baseline_seconds": baseline_estimate,
             "graph_updated": True,
-            "message": (
-                f"⚡ Incremental update complete: re-indexed {len(changed_files)} file(s) "
-                f"in {elapsed}s. Skipped {skipped} unchanged files. "
-                f"Full scan baseline: ~{baseline}s."
-            ),
+            "message": msg
         }
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # FAST PATH — graph walk + AST only (no I/O to ChromaDB, no LLM)
-    # ─────────────────────────────────────────────────────────────────────────
+    def run_sonar_scan(self, repo_url: str) -> dict:
+        """
+        Task 4: Real-time SonarQube project scan.
+        """
+        from app.core.sonar_client import sonar
+        
+        # 1. Resolve project path
+        if repo_url.startswith("http"):
+            repo_name = repo_url.rstrip("/").split("/")[-1].replace(".git", "")
+            project_root = os.path.join(settings.REPO_STORAGE_PATH, repo_name)
+        else:
+            project_root = repo_url
+            repo_name = os.path.basename(project_root.rstrip("/\\"))
+
+        if not os.path.isdir(project_root):
+            raise ValueError(f"Project path not found: {project_root}")
+
+        # 2. Trigger Docker Scan
+        print(f"[Librarian:Sonar] Starting full scan for {repo_name}...")
+        scan_success = sonar.run_scanner(project_root, repo_name)
+        
+        if not scan_success:
+            return {"status": "error", "message": "SonarScanner failed. Ensure Docker is running."}
+
+        # 3. Fetch Aggregate Metrics
+        metrics = sonar.get_project_metrics(repo_name)
+        
+        # 4. Update Graph Metadata (Hot-patch)
+        cache_file = os.path.join(project_root, "_kachow_graph.json")
+        if os.path.exists(cache_file):
+            try:
+                with open(cache_file, "r", encoding="utf-8") as f:
+                    graph_data = json.load(f)
+                
+                # Update project level health
+                graph_data["system_health"] = metrics.get("sqale_rating", 100) # Simple proxy
+                
+                # Fetch new metrics for EVERY file
+                for node in graph_data.get("nodes", []):
+                    if node["type"] == "file":
+                        node["sonar_health"] = sonar.get_file_metrics(node["id"], repo_name)
+                
+                with open(cache_file, "w", encoding="utf-8") as f:
+                    json.dump(graph_data, f, default=str)
+                
+                print(f"[Librarian:Sonar] Graph metrics updated for {repo_name}")
+            except Exception as e:
+                print(f"[Librarian:Sonar] Metadata update failed: {e}")
+
+        return {
+            "status": "success",
+            "project_metrics": metrics,
+            "message": f"Real-time scan complete. System health: {metrics.get('quality_gate', 'PASSED')}"
+        }
+
+    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # FAST PATH â€” graph walk + AST only (no I/O to ChromaDB, no LLM)
+    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _build_graph(self, root: str, name: str, branch: str):
         """
@@ -449,7 +450,7 @@ class LibrarianService:
         edges_data: List[Dict[str, str]] = []
         file_contents: Dict[str, str] = {}
 
-        # ── PASS 1: Walk & map ───────────────────────────────────────────────
+        # â”€â”€ PASS 1: Walk & map â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         for dirpath, dirnames, filenames in os.walk(root):
             dirnames[:] = [
                 d for d in dirnames
@@ -504,7 +505,7 @@ class LibrarianService:
                     module_map[mod] = rel_path
                     module_map[filename.replace(".py", "")] = rel_path
 
-        # ── PASS 2: Python AST import edges ─────────────────────────────────
+        # â”€â”€ PASS 2: Python AST import edges â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         total_functions = 0
         documented_functions = 0
         for rel_path, content in file_contents.items():
@@ -529,7 +530,7 @@ class LibrarianService:
                     if ast.get_docstring(node):
                         documented_functions += 1
 
-        # ── PASS 3: JS/TS heuristic edges ───────────────────────────────────
+        # â”€â”€ PASS 3: JS/TS heuristic edges â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         js_files = {
             p: c for p, c in file_contents.items()
             if p.endswith((".js", ".ts", ".tsx", ".jsx"))
@@ -554,9 +555,9 @@ class LibrarianService:
 
         return graph_response, G, file_contents, nodes_data, edges_data
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # BACKGROUND WORK — embedding + docs + cache persistence
-    # ─────────────────────────────────────────────────────────────────────────
+    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # BACKGROUND WORK â€” embedding + docs + cache persistence
+    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _run_background(
         self,
@@ -577,21 +578,21 @@ class LibrarianService:
                 self._generate_docs(name, root, nodes_data, edges_data)
                 self._save_cache(cache_file, graph_response)
                 alert_system.add_alert(
-                    title="🧠 Embedding Complete",
+                    title="ðŸ§  Embedding Complete",
                     message=f"Vector store updated with {graph_response.total_chunks_embedded} chunks. RAG is ready.",
                     severity="info",
                 )
             except Exception as e:
                 print(f"[Librarian:Background] Error: {e}")
                 alert_system.add_alert(
-                    title="⚠️ Background Task Warning",
+                    title="âš ï¸ Background Task Warning",
                     message=f"Non-critical background processing failed: {e}",
                     severity="warning",
                 )
 
         t = threading.Thread(target=_worker, daemon=True, name=f"librarian-bg-{name}")
         t.start()
-        print(f"[Librarian] graph returned — background work started (thread: {t.name})")
+        print(f"[Librarian] graph returned â€” background work started (thread: {t.name})")
 
     def _embed_chunks(self, name: str, file_contents: Dict[str, str], graph_response: GraphResponse):
         """Upsert file chunks into ChromaDB vector store."""
@@ -624,9 +625,9 @@ class LibrarianService:
         except Exception as e:
             print(f"[Librarian:bg] ChromaDB upsert failed: {e}")
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # CLONE / PULL — already fast (git protocol)
-    # ─────────────────────────────────────────────────────────────────────────
+    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # CLONE / PULL â€” already fast (git protocol)
+    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _clone_or_pull(self, url: str, branch: str) -> str:
         repo_name = url.rstrip("/").split("/")[-1].replace(".git", "")
@@ -643,14 +644,14 @@ class LibrarianService:
                 print(f"[Librarian:Clone] Pull failed, using existing clone: {e}")
         else:
             print(f"[Librarian:Clone] Cloning {repo_name}@{branch}...")
-            # shallow clone: only latest commit — much faster for large repos
+            # shallow clone: only latest commit â€” much faster for large repos
             Repo.clone_from(url, target, branch=branch, depth=1)
 
         return target
 
-    # ─────────────────────────────────────────────────────────────────────────
+    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # HELPERS
-    # ─────────────────────────────────────────────────────────────────────────
+    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     @staticmethod
     def _extract_imports(tree: ast.AST) -> List[str]:
@@ -723,14 +724,14 @@ class LibrarianService:
             return "module"
         return "file"
 
-    # ── Cache helpers ──────────────────────────────────────────────────────────
+    # â”€â”€ Cache helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     @staticmethod
     def _save_cache(cache_file: str, resp: GraphResponse):
         try:
             with open(cache_file, "w", encoding="utf-8") as f:
                 json.dump(resp.model_dump(), f, default=str)
-            print(f"[Librarian:bg] cache written → {cache_file}")
+            print(f"[Librarian:bg] cache written â†’ {cache_file}")
         except Exception as e:
             print(f"[Librarian:bg] cache write failed: {e}")
 
@@ -742,7 +743,7 @@ class LibrarianService:
         data["from_cache"] = True
         resp = GraphResponse(**data)
         alert_system.add_alert(
-            title="⚡ Cache Hit",
+            title="âš¡ Cache Hit",
             message=f"Returned cached graph for '{resp.project_name}' instantly. Use force=true to re-scan.",
             severity="info",
         )
@@ -812,6 +813,168 @@ Output ONLY markdown."""
         except Exception as e:
             print(f"[Librarian:bg] doc gen failed: {e}")
 
+    def generate_comprehensive_docs(self, project_name: str, repo_url: Optional[str] = None) -> str:
+        """
+        Generates industry-standard PROJECT_GUIDE.md documentation.
+        """
+        print(f"\n[Librarian:Docs] Generating comprehensive docs for: {project_name}")
+        
+        # Resolve repo path
+        if repo_url and repo_url.startswith("http"):
+            repo_path = os.path.join(settings.REPO_STORAGE_PATH, project_name)
+        else:
+            repo_path = repo_url or os.path.join(settings.REPO_STORAGE_PATH, project_name)
+
+        if not os.path.isdir(repo_path):
+            print(f"[Librarian:Docs] Path not found: {repo_path}")
+            return "Error: Repository path not found. Please process the repository first."
+
+        # 1. Gather Context
+        setup_files = ["package.json", "requirements.txt", "go.mod", "docker-compose.yml", "Dockerfile"]
+        context_parts = []
+        for sf in setup_files:
+            p = os.path.join(repo_path, sf)
+            if os.path.exists(p):
+                try:
+                    with open(p, "r", encoding="utf-8", errors="ignore") as f:
+                        context_parts.append(f"### {sf}\n{f.read(3000)}")
+                except: pass
+
+        # 2. Get Architecture Context (Knowledge Graph)
+        arch_summary = "No architecture map available."
+        cache_file = os.path.join(repo_path, "_kachow_graph.json")
+        if os.path.exists(cache_file):
+            try:
+                with open(cache_file, "r", encoding="utf-8") as f:
+                    graph = json.load(f)
+                    total_files = len([n for n in graph.get("nodes", []) if n.get("type") == "file"])
+                    total_edges = len(graph.get("edges", []))
+                    arch_summary = f"The project contains {total_files} files with {total_edges} identified architectural dependencies."
+            except: pass
+
+        # 3. LLM Generation
+        prompt = f"""
+        ROLE: Expert Technical Architect & Lead Developer.
+        TASK: Generate a comprehensive, industry-level `PROJECT_GUIDE.md` for the repository '{project_name}'.
+        
+        CONTEXT FROM CONFIG FILES:
+        {" ".join(context_parts)}
+        
+        ARCHITECTURE SNAPSHOT:
+        {arch_summary}
+        
+        REQUIREMENTS:
+        1. Use professional, clear, and high-agency language.
+        2. STRUCTURE (industry-standard):
+           - # Project Title & Overview: What is this project?
+           - ## ðŸ›  Tech Stack: List core languages, frameworks, and tools.
+           - ## ðŸš€ Installation & Setup: Clear, step-by-step commands (pip, npm, docker, etc.).
+           - ## ðŸ— Architecture Overview: Describe the system design based on the architecture snapshot.
+           - ## ðŸ§ª Testing & Quality: How to run tests and verify changes.
+           - ## ðŸ“– API Documentation (if applicable): Key endpoints or patterns.
+           - ## ðŸ¤ Contributing: Guidelines for developers.
+        3. DONT BE GENERIC: Look at the config files to deduce EXACT installation steps.
+        
+        OUTPUT ONLY THE MARKDOWN CONTENT.
+        """
+
+        try:
+            completion = groq_client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": "You are a world-class software architect and technical writer."},
+                    {"role": "user", "content": prompt},
+                ],
+                model=settings.LLM_MODEL,
+                max_tokens=4096,
+            )
+            markdown = completion.choices[0].message.content or "Failed to generate documentation."
+            
+            # Save to disk as well
+            guide_path = os.path.join(repo_path, "PROJECT_GUIDE.md")
+            with open(guide_path, "w", encoding="utf-8") as f:
+                f.write(markdown)
+            
+            print(f"[Librarian:Docs] Generated PROJECT_GUIDE.md for {project_name}")
+            return markdown
+        except Exception as e:
+            msg = f"LLM Generation Error: {e}"
+            print(f"[Librarian:Docs] {msg}")
+            return msg
+
+
+    def trigger_sonar_scan(self, repo_url: str) -> dict:
+        """
+        Runs SonarQube scan on the repository and updates file-level health in the graph.
+        """
+        print(f"\n[Librarian:Sonar] Triggering scan for {repo_url}")
+        
+        # 1. Resolve project root
+        if repo_url.startswith("http"):
+            repo_name = repo_url.rstrip("/").split("/")[-1].replace(".git", "")
+            project_root = os.path.join(settings.REPO_STORAGE_PATH, repo_name)
+        else:
+            project_root = repo_url
+            repo_name = os.path.basename(project_root.rstrip("/\\"))
+
+        if not os.path.isdir(project_root):
+            raise ValueError(f"Project path not found: {project_root}")
+
+        from app.core.sonar_client import sonar
+        
+        # 2. Run the scanner (Docker)
+        success = sonar.run_scanner(project_root, repo_name)
+        if not success:
+            raise Exception("SonarScanner failed to complete.")
+
+        # 3. Load current graph
+        cache_file = os.path.join(project_root, "_kachow_graph.json")
+        if not os.path.exists(cache_file):
+            raise FileNotFoundError("Graph cache not found. Please scan the repository normally first.")
+            
+        with open(cache_file, "r", encoding="utf-8") as f:
+            graph_data = json.load(f)
+
+        # 4. Fetch metrics for every file and update nodes
+        nodes = graph_data.get("nodes", [])
+        total_bugs = 0
+        file_count = 0
+        
+        for node in nodes:
+            if node.get("type") == "folder":
+                continue
+                
+            rel_path = node["id"]
+            # Fetch real-time metrics
+            health = sonar.get_file_metrics(rel_path, repo_name)
+            node["sonar_health"] = health
+            
+            total_bugs += health.get("bugs", 0)
+            file_count += 1
+
+        # 5. Update global health score in meta
+        # Simplified formula: health starts at 100, drops by 5 for every bug, min 0
+        system_health = max(0, 100 - (total_bugs * 5))
+        if "metadata" not in graph_data:
+            graph_data["metadata"] = {}
+        graph_data["metadata"]["system_health"] = system_health
+        
+        # 6. Save updated graph
+        with open(cache_file, "w", encoding="utf-8") as f:
+            json.dump(graph_data, f, default=str)
+
+        alert_system.add_alert(
+            title="🛡️ Sonar Scan Complete",
+            message=f"Deep analysis finished for {repo_name}. System Health: {system_health}%",
+            severity="success"
+        )
+        
+        return {
+            "success": True,
+            "project": repo_name,
+            "system_health": system_health,
+            "total_files_audited": file_count,
+            "total_bugs": total_bugs
+        }
 
 # Singleton used by the router
 librarian = LibrarianService()

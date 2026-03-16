@@ -13,6 +13,10 @@ class FileNode(BaseModel):
     layer: str         # "backend" | "frontend" | "system"
     language: Optional[str] = None
     size_bytes: Optional[int] = None
+    # --- New Metadata Layers for GPS Map (Task 2) ---
+    owner: Optional[str] = "Unknown"
+    sonar_health: Optional[dict] = None
+    jira_tickets: List[str] = []
 
 class GraphResponse(BaseModel):
     project_name: str
@@ -59,4 +63,20 @@ class IncrementalUpdateResult(BaseModel):
     update_time_seconds: float     # benchmark — how long this took
     full_scan_baseline_seconds: float  # estimated baseline for comparison
     graph_updated: bool            # whether the graph cache was refreshed
-    message: str                   # human-readable summary
+    message: str                   # human-readable summary
+
+class DocumentationRequest(BaseModel):
+    project_name: str
+    repo_url: Optional[str] = None
+
+class DocumentationResponse(BaseModel):
+    markdown: str
+    message: str
+
+class SonarScanRequest(BaseModel):
+    repo_url: str
+
+class SonarScanResponse(BaseModel):
+    status: str
+    project_metrics: Optional[dict] = None
+    message: str

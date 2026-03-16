@@ -112,6 +112,16 @@ def delete_collection(collection_name: str):
         pass  # Already deleted or never existed
 
 
+def delete_chunks_by_file(collection_name: str, file_path: str):
+    """Deletes all chunks associated with a specific file path."""
+    collection = get_or_create_collection(collection_name)
+    try:
+        collection.delete(where={"file_path": file_path})
+        print(f"[VectorStore] Deleted chunks for {file_path}")
+    except Exception as e:
+        print(f"[VectorStore] Failed to delete chunks for {file_path}: {e}")
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _slugify(name: str) -> str:

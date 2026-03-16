@@ -44,7 +44,9 @@ export interface ApiGraphNode {
   layer: string          // "backend" | "frontend" | "system"
   language?: string
   size_bytes?: number
-  sonar_health?: Record<string, unknown>
+  owner?: string
+  sonar_health?: Record<string, any>
+  jira_tickets?: string[]
 }
 
 /** Matches rebackend edge structure */
@@ -168,26 +170,25 @@ export interface GithubSyncResult {
   message: string
 }
 
-/**
- * Fetches real-time commits and Pull Requests directly from GitHub + local git.
- * Endpoint: GET /api/librarian/sync-github
- */
 export async function syncGithub(repoUrl: string): Promise<GithubSyncResult> {
   return get<GithubSyncResult>(
     `/api/librarian/sync-github?input_source=${encodeURIComponent(repoUrl)}`
   )
 }
 
+export interface SonarScanResponse {
+  status: string
+  project_metrics?: Record<string, any>
+  message: string
+}
+
 /**
- * Triggers a stub scan (SonarQube deferred).
- * Endpoint: POST /api/scan/trigger
+ * Triggers a real-time SonarQube quality audit.
+ * Endpoint: POST /api/librarian/sonar-scan
  */
-export async function triggerSonarScan(
-  repoUrl: string,
-  _branch: string = "main"
-): Promise<{ status: string; message: string }> {
-  return post<{ status: string; message: string }>("/api/scan/trigger", {
-    project_root: repoUrl,
+export async function triggerSonarScan(repoUrl: string): Promise<SonarScanResponse> {
+  return post<SonarScanResponse>("/api/librarian/sonar-scan", {
+    repo_url: repoUrl,
   })
 }
 
@@ -441,39 +442,41 @@ export async function getArchitectureTimeline(repoUrl?: string): Promise<Timelin
 
 // ─── Documentation Generator ──────────────────────────────────────────────────
 
-export interface DocNode {
-  id: string
-  label: string
-  type: string
-  layer?: string
-  sonar_health?: Record<string, unknown>
-}
-
-export interface DocEdge {
-  source: string
-  target: string
-  relation: string
-}
-
-export interface DocsRequest {
+export interface DocumentationRequest {
   project_name: string
-  project_root: string
-  nodes: DocNode[]
-  edges: DocEdge[]
+  repo_url?: string
 }
 
-export interface DocsResponse {
-  readme: string
-  prd: string
+export interface DocumentationResponse {
+  markdown: string
   message: string
 }
 
 /**
- * Generates README and PRD documentation.
- * Endpoint: POST /api/librarian/generate-docs (compat stub on rebackend)
+ * Generates industry-standard PROJECT_GUIDE.md documentation.
+ * Endpoint: POST /api/librarian/generate-docs
  */
+export async function generateIndustryDocs(req: DocumentationRequest): Promise<DocumentationResponse> {
+  return post<DocumentationResponse>("/api/librarian/generate-docs", req)
+}
+
+/** @deprecated Use generateIndustryDocs */
+export interface DocNode { id: string; label: string; type: string }
+/** @deprecated Use generateIndustryDocs */
+export interface DocEdge { source: string; target: string; relation: string }
+/** @deprecated Use generateIndustryDocs */
+export interface DocsRequest { project_name: string; project_root: string; nodes: DocNode[]; edges: DocEdge[] }
+/** @deprecated Use generateIndustryDocs */
+export interface DocsResponse { readme: string; prd: string; message: string; markdown?: string }
+
+/** @deprecated Use generateIndustryDocs */
 export async function generateDocs(req: DocsRequest): Promise<DocsResponse> {
-  return post<DocsResponse>("/api/librarian/generate-docs", req)
+  const res = await post<DocsResponse>("/api/librarian/generate-docs", req)
+  // Compatibility fix: if the server returns the new markdown format, map it to readme for the UI
+  if (res.markdown && !res.readme) {
+    return { ...res, readme: res.markdown, prd: "# Dynamic PRD\nPRD content is inside the main guide." }
+  }
+  return res
 }
 
 // ─── Alerts ───────────────────────────────────────────────────────────────────

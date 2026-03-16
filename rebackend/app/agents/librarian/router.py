@@ -5,10 +5,29 @@ import traceback
 from typing import Optional, List
 from fastapi import APIRouter, HTTPException, Query
 
-from .models import ProcessRequest, GraphResponse, CommitInfo, IncrementalUpdateRequest, GithubSyncResult
+from .models import (
+    ProcessRequest, GraphResponse, CommitInfo, 
+    IncrementalUpdateRequest, GithubSyncResult,
+    DocumentationRequest, DocumentationResponse,
+    SonarScanRequest, SonarScanResponse
+)
 from .service import librarian
 
 router = APIRouter()
+
+
+@router.post("/generate-docs", response_model=DocumentationResponse, summary="Generates industry-standard PROJECT_GUIDE.md")
+async def generate_documentation(request: DocumentationRequest):
+    print(f"\n[Router] POST /librarian/generate-docs -> project={request.project_name}")
+    try:
+        markdown = librarian.generate_comprehensive_docs(request.project_name, request.repo_url)
+        return DocumentationResponse(
+            markdown=markdown,
+            message="Industry-level documentation generated successfully."
+        )
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Documentation generation failed: {e}")
 
 
 @router.post("/process", response_model=GraphResponse, summary="Load & process a repository")
@@ -112,4 +131,16 @@ async def incremental_update(request: IncrementalUpdateRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Incremental update failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Incremental update failed: {e}")
+
+@router.post("/sonar-scan", response_model=SonarScanResponse, summary="🔍 Run real-time SonarQube scan")
+async def run_sonar_scan(request: SonarScanRequest):
+    """
+    Triggers a full SonarQube quality audit.
+    """
+    try:
+        result = librarian.run_sonar_scan(request.repo_url)
+        return result
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))

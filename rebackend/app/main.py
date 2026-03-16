@@ -10,10 +10,9 @@ from fastapi.staticfiles import StaticFiles
 from app.core.alerts import alert_system
 from app.core.config import settings
 from app.agents.librarian.router import router as librarian_router
-
-# ── Future agent routers (uncomment as each agent is built) ──────────────────
 from app.agents.architect.router import router as architect_router
 from app.agents.guardian.router import router as guardian_router
+from app.agents.guardian.webhook_router import router as guardian_webhook
 from app.agents.mentor.router import router as mentor_router
 from app.api.mobile import router as mobile_router
 
@@ -41,6 +40,7 @@ app.add_middleware(
 app.include_router(librarian_router, prefix="/api/librarian", tags=["📚 Librarian"])
 app.include_router(architect_router, prefix="/api/architect", tags=["🏗️ Architect"])
 app.include_router(guardian_router,  prefix="/api/guardian",  tags=["🛡️ Guardian"])
+app.include_router(guardian_webhook, prefix="/api/guardian",  tags=["🛡️ Guardian Webhook"])
 app.include_router(mentor_router,    prefix="/api/mentor",    tags=["🎓 Mentor"])
 app.include_router(mobile_router, prefix="/api/mobile", tags=["Mobile Adapter"])
 

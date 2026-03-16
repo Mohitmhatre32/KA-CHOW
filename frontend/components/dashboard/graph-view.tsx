@@ -7,10 +7,16 @@ import { useGraphData } from "@/hooks/use-graph-data"
 import {
   Box, LayoutTemplate, Wrench, Cloud, Anchor, Activity,
   ShieldCheck, Bug, Zap, Percent, MessageSquareQuote, X, FileCode,
-  AlertCircle, Loader2, RefreshCcw, Folder, Flame, Copy, Sparkles, type LucideProps,
+  AlertCircle, Loader2, RefreshCcw, Folder, Flame, Copy, Sparkles, Search, type LucideProps,
 } from "lucide-react"
 import { toast } from "sonner"
-import { generateDocs, incrementalUpdate, type DocsResponse, type IncrementalUpdateResult } from "@/lib/api"
+import { 
+  generateIndustryDocs, 
+  incrementalUpdate, 
+  triggerSonarScan,
+  type DocumentationResponse, 
+  type IncrementalUpdateResult 
+} from "@/lib/api"
 import { getActiveRepo } from "@/lib/repo-store"
 import { Button } from "@/components/ui/button"
 import { DocsModal } from "./docs-modal"
@@ -55,7 +61,10 @@ export function GraphView() {
   // Documentation state
   const [isDocsModalOpen, setIsDocsModalOpen] = useState(false)
   const [isGeneratingDocs, setIsGeneratingDocs] = useState(false)
-  const [generatedDocs, setGeneratedDocs] = useState<DocsResponse | null>(null)
+  const [generatedDocs, setGeneratedDocs] = useState<DocumentationResponse | null>(null)
+
+  // Sonar scan state
+  const [isScanning, setIsScanning] = useState(false)
 
   // Incremental update state
   const [isIncremental, setIsIncremental] = useState(false)
@@ -114,14 +123,22 @@ export function GraphView() {
   }, [nodes])
 
   // --- Viewport Handlers ---
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault()
-    const scale = e.deltaY > 0 ? 1.05 : 0.95
-    setViewBox((prev) => ({
-      ...prev, w: prev.w * scale, h: prev.h * scale,
-      x: prev.x + (prev.w - prev.w * scale) / 2,
-      y: prev.y + (prev.h - prev.h * scale) / 2,
-    }))
+  useEffect(() => {
+    const svg = svgRef.current
+    if (!svg) return
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const scale = e.deltaY > 0 ? 1.05 : 0.95
+      setViewBox((prev) => ({
+        ...prev, w: prev.w * scale, h: prev.h * scale,
+        x: prev.x + (prev.w - prev.w * scale) / 2,
+        y: prev.y + (prev.h - prev.h * scale) / 2,
+      }))
+    }
+
+    svg.addEventListener("wheel", handleWheel, { passive: false })
+    return () => svg.removeEventListener("wheel", handleWheel)
   }, [])
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
@@ -222,35 +239,13 @@ export function GraphView() {
       return
     }
 
-    // Safety check for project_root (mandatory for background processing)
-    if (!graphMeta.project_root) {
-      toast.error("Internal Error: project path not found. Please re-scan the repository.")
-      return
-    }
-
     setIsGeneratingDocs(true)
     setIsDocsModalOpen(true)
     try {
-      // Build simplified edge map for documentation analysis
-      const docEdges = rawNodes.flatMap(n =>
-        (n.connections || []).map(targetId => ({
-          source: n.id,
-          target: targetId,
-          relation: "imports"
-        }))
-      )
-
-      const res = await generateDocs({
+      const activeRepo = getActiveRepo()
+      const res = await generateIndustryDocs({
         project_name: graphMeta.repo_name,
-        project_root: graphMeta.project_root,
-        nodes: rawNodes.map(n => ({
-          id: n.id,
-          label: n.label,
-          type: n.type,
-          layer: n.layer || "system",
-          sonar_health: n.sonar_health
-        })),
-        edges: docEdges
+        repo_url: activeRepo?.repo_url || undefined
       })
       setGeneratedDocs(res)
     } catch (err) {
@@ -259,6 +254,31 @@ export function GraphView() {
       setIsDocsModalOpen(false)
     } finally {
       setIsGeneratingDocs(false)
+    }
+  }
+
+  const handleSonarScan = async () => {
+    const activeRepo = getActiveRepo()
+    if (!activeRepo?.repo_url) {
+      toast.error("No repository loaded. Please scan a repo in the Librarian tab first.")
+      return
+    }
+
+    setIsScanning(true)
+    const toastId = toast.loading("Running deep SonarQube scan... (this take a minute)")
+    try {
+      const res = await triggerSonarScan(activeRepo.repo_url)
+      if (res.status === "success") {
+        toast.success(res.message, { id: toastId })
+        refresh() // Reload graph to show new health dots
+      } else {
+        toast.error(res.message, { id: toastId })
+      }
+    } catch (err) {
+      console.error("Sonar Scan Failed:", err)
+      toast.error("SonarQube scan failed. Check if Docker is running.", { id: toastId })
+    } finally {
+      setIsScanning(false)
     }
   }
 
@@ -320,6 +340,19 @@ export function GraphView() {
               {isIncremental ? "Updating..." : "⚡ Incremental"}
             </button>
 
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleSonarScan();
+              }}
+              disabled={isScanning}
+              className="flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[10px] border border-blue-500/30 bg-blue-500/10 text-blue-400 transition-all hover:bg-blue-500/20 disabled:opacity-50"
+              title="Run deep SonarQube quality audit"
+            >
+              <Search className={`h-2.5 w-2.5 ${isScanning ? "animate-spin" : ""}`} />
+              {isScanning ? "Scanning..." : "🔍 Sonar Scan"}
+            </button>
+
           </div>
           {/* Benchmark result pill */}
           {incrementalResult && (
@@ -354,7 +387,6 @@ export function GraphView() {
       <svg
         ref={svgRef}
         viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`}
-        onWheel={handleWheel}
         onMouseDown={(e) => {
           if (e.target === svgRef.current || (e.target as SVGElement).tagName === "rect") {
             setIsPanning(true)
@@ -480,6 +512,28 @@ export function GraphView() {
                     </span>
                   </div>
 
+                  {/* Owner & Jira Section (Task 2: GPS) */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="flex flex-col rounded border border-border bg-secondary/20 p-1.5 min-w-0">
+                      <div className="flex items-center gap-1 text-muted-foreground">
+                        <Anchor className="h-2.5 w-2.5 shrink-0" />
+                        <span className="text-[7px] font-bold uppercase truncate">Owner</span>
+                      </div>
+                      <span className="mt-0.5 font-mono text-[9px] font-bold text-foreground truncate">{selectedNode.owner || "Unknown"}</span>
+                    </div>
+                    <div className="flex flex-col rounded border border-border bg-secondary/20 p-1.5 min-w-0">
+                      <div className="flex items-center gap-1 text-muted-foreground">
+                        <MessageSquareQuote className="h-2.5 w-2.5 shrink-0" />
+                        <span className="text-[7px] font-bold uppercase truncate">Jira</span>
+                      </div>
+                      <span className="mt-0.5 font-mono text-[9px] font-bold text-foreground truncate">
+                        {(selectedNode.jira_tickets && selectedNode.jira_tickets.length > 0) 
+                          ? selectedNode.jira_tickets[0] 
+                          : "None"}
+                      </span>
+                    </div>
+                  </div>
+
                   {/* Metrics Grid */}
                   <div className="grid grid-cols-2 gap-2">
                     {[
@@ -502,7 +556,7 @@ export function GraphView() {
 
                   <div className="space-y-1.5 rounded-lg bg-primary/5 p-2.5 border border-primary/10">
                     <div className="flex items-center gap-1.5 text-primary">
-                      <MessageSquareQuote className="h-3 w-3" />
+                      <Sparkles className="h-3 w-3" />
                       <span className="text-[9px] font-bold uppercase">Librarian Insight</span>
                     </div>
                     <p className="text-[10px] leading-relaxed text-muted-foreground italic">

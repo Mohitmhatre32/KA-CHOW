@@ -66,30 +66,77 @@ Follow these strict rules:
 Return ONLY your explanation and the code block.
 """
 
-    def review_code(self, file_name: str, code_content: str) -> PRReviewResponse:
+    def structural_audit(self, file_name: str, code_content: str) -> dict:
+        """
+        Task 1: Deterministic structural audit using AST.
+        """
+        import ast
+        try:
+            tree = ast.parse(code_content, filename=file_name)
+            functions = [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+            classes = [n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)]
+            
+            issues = []
+            for func in functions:
+                if not ast.get_docstring(func):
+                    issues.append(f"Missing docstring for function '{func.name}'")
+            for cls in classes:
+                if not ast.get_docstring(cls):
+                    issues.append(f"Missing docstring for class '{cls.name}'")
+                    
+            return {
+                "counts": {"functions": len(functions), "classes": len(classes)},
+                "issues": issues,
+                "passed": len(issues) == 0
+            }
+        except SyntaxError as e:
+            return {"counts": {}, "issues": [f"Syntax Error: {e}"], "passed": False}
+
+    def health_check(self, file_name: str, repo_name: str) -> dict:
+        """
+        Task 1: Quality check via SonarQube.
+        """
+        from app.core.sonar_client import sonar
+        metrics = sonar.get_file_metrics(file_name, repo_name)
+        
+        passed = metrics.get("quality_gate") == "PASSED"
+        issues = []
+        if metrics.get("bugs", 0) > 0:
+            issues.append(f"High risk: {metrics['bugs']} Bugs detected by SonarQube")
+        if metrics.get("code_smells", 0) > 5:
+            issues.append("Complexity Warning: High number of code smells")
+            
+        return {"passed": passed, "issues": issues, "metrics": metrics}
+
+    def review_code(self, file_name: str, code_content: str, repo_name: str = "default") -> PRReviewResponse:
         print(f"[Guardian:Review] Analyzing {file_name}...")
+        
+        # 1. Deterministic Structural Audit
+        struct = self.structural_audit(file_name, code_content)
+        
+        # 2. SonarQube Quality Check
+        health = self.health_check(file_name, repo_name)
+        
+        # 3. LLM Final Review (Contextual intelligence)
         user_prompt = f"File: {file_name}\n\nCode:\n```\n{code_content}\n```"
         try:
-            result = generate_json(user_prompt, self.review_prompt)
-            passed = result.get("passed", True)
-            issues = result.get("issues", [])
-            message = result.get("message", "Review completed.")
+            llm_result = generate_json(user_prompt, self.review_prompt)
             
-            if issues and passed:
-                passed = False
+            # Combine all issues
+            all_issues = list(set(struct["issues"] + health["issues"] + llm_result.get("issues", [])))
+            passed = struct["passed"] and health["passed"] and llm_result.get("passed", True)
+            
+            message = llm_result.get("message", "Review completed.")
+            if not passed:
+                message = f"BLOCKER: {struct['counts'].get('functions', 0)} functions analyzed. {message}"
 
-            # ── Write audit log (the "paper trail") ─────────────────────────
-            _save_audit_log(file_name, passed, issues, message)
+            # ── Write audit log (the "paper trail" - Task 1) ─────────────────
+            _save_audit_log(file_name, passed, all_issues, message)
                 
-            print(f"[Guardian:Review] Result: {'PASSED' if passed else 'BLOCKED'} ({len(issues)} issues)")
-            return PRReviewResponse(passed=passed, issues=issues, message=message)
+            print(f"[Guardian:Review] Result: {'PASSED' if passed else 'BLOCKED'} ({len(all_issues)} issues)")
+            return PRReviewResponse(passed=passed, issues=all_issues, message=message)
         except Exception as e:
             print(f"[Guardian:Review] Error: {e}")
-            alert_system.add_alert(
-                title="Guardian Review Failed",
-                message=str(e),
-                severity="error"
-            )
             raise ValueError(f"Failed to generate review: {e}")
 
 
@@ -164,5 +211,33 @@ Return ONLY your explanation and the code block.
                 severity="error"
             )
             raise IOError(f"Failed to save file: {e}")
+
+    def post_pr_comment(self, repo_full_name: str, pr_number: int, comment: str):
+        """
+        Task 1: Enforcement Action - Post comment to GitHub PR.
+        """
+        import requests
+        from app.core.config import settings
+        
+        if not settings.GITHUB_TOKEN:
+            print(f"[Guardian:Enforce] GITHUB_TOKEN missing. Skipping comment on PR #{pr_number}")
+            return False
+            
+        url = f"https://api.github.com/repos/{repo_full_name}/issues/{pr_number}/comments"
+        headers = {
+            "Authorization": f"token {settings.GITHUB_TOKEN}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+        try:
+            res = requests.post(url, json={"body": comment}, headers=headers, timeout=5)
+            if res.status_code == 201:
+                print(f"[Guardian:Enforce] Comment posted to PR #{pr_number}")
+                return True
+            else:
+                print(f"[Guardian:Enforce] Failed to post comment: {res.text}")
+                return False
+        except Exception as e:
+            print(f"[Guardian:Enforce] Error posting comment: {e}")
+            return False
 
 guardian_service = GuardianService()
