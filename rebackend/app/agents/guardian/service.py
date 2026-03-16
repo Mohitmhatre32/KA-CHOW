@@ -3,6 +3,7 @@ import json
 from datetime import datetime, timezone
 from app.core.llm import generate_json, generate_text
 from app.core.alerts import alert_system
+from app.core.config import settings
 from .models import PRReviewResponse, AutoHealResponse
 
 # Audit log path — stored in the rebackend's storage folder
@@ -173,14 +174,24 @@ Return ONLY your explanation and the code block.
         """
         Safely saves content to the given absolute file_path.
         """
-        cwd = os.path.abspath(os.getcwd())
-        abs_path = os.path.abspath(file_path)
+        # 1. Normalize and handle stale Docker paths mapping
+        target_path = file_path.replace("\\", "/")
+        if target_path.startswith("/app/storage/repos/"):
+            parts = target_path.split("/")
+            # Parts: ['', 'app', 'storage', 'repos', 'RepoName', 'path', 'to', 'file']
+            if len(parts) > 5:
+                repo_name = parts[4]
+                rel_path = "/".join(parts[5:])
+                target_path = os.path.join(settings.REPO_STORAGE_PATH, repo_name, rel_path)
         
-        # Normpath to handle mixed slashes in Windows/Linux interop
+        cwd = os.path.abspath(os.getcwd())
+        abs_path = os.path.abspath(target_path)
         abs_path = os.path.normpath(abs_path)
         storage_dir = os.path.abspath(os.path.join(cwd, "storage"))
         
-        is_safe = abs_path.startswith(cwd) or abs_path.startswith(storage_dir)
+        # Use normcase for case-insensitive comparison on Windows
+        is_safe = os.path.normcase(abs_path).startswith(os.path.normcase(cwd)) or \
+                  os.path.normcase(abs_path).startswith(os.path.normcase(storage_dir))
         
         if not is_safe:
             print(f"[Guardian:Save] BLOCKED: Path {abs_path} is outside allowed directories.")

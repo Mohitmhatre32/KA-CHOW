@@ -113,7 +113,13 @@ export default function DashboardPage() {
     if (!activeRepoUrl) return
     setIsScanning(true)
     try {
-      await triggerSonarScan(activeRepoUrl, activeRepoBranch || "main")
+      await triggerSonarScan(activeRepoUrl)
+      // Refresh the repository data to update the graph and metrics
+      const data = await analyzeRepository(activeRepoUrl, activeRepoBranch || "main")
+      const newId = upsertRepo(activeRepoUrl, data)
+      setActiveRepoId(newId)
+      // Dispatch event to notify components like HealthPanel
+      window.dispatchEvent(new Event("active-repo-changed"))
     } catch (error) {
       console.error("Failed to trigger scan", error)
     } finally {

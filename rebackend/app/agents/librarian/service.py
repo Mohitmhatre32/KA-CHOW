@@ -112,7 +112,7 @@ class LibrarianService:
             print(f"[Librarian:Process] Error: Path not found {project_root}")
             raise ValueError(f"Path does not exist or is not a directory: {project_root}")
 
-        # 2. Check cache (instant return â€” no background work needed)
+        # 2. Check cache (instant return — no background work needed)
         cache_file = os.path.join(project_root, "_kachow_graph.json")
         if not force and os.path.exists(cache_file):
             print(f"[Librarian:Process] Cache HIT for {project_name}. Returning instantly.")
@@ -121,18 +121,18 @@ class LibrarianService:
         print(f"[Librarian:Process] Cache MISS or force=true. Starting full scan.")
 
         alert_system.add_alert(
-            title=f"ðŸ” Scanning: {project_name}",
+            title=f"🔍 Scanning: {project_name}",
             message=f"Building dependency graph on branch '{branch}'.",
             severity="info",
         )
 
-        # 3. FAST: walk + AST (graph only â€” no embedding, no LLM)
+        # 3. FAST: walk + AST (graph only — no embedding, no LLM)
         graph_response, G, file_contents, nodes_data, edges_data = self._build_graph(
             project_root, project_name, branch
         )
 
         alert_system.add_alert(
-            title="âœ… Graph Ready",
+            title="✅ Graph Ready",
             message=f"Mapped {graph_response.total_files} files. Embedding is running in background.",
             severity="success",
         )
@@ -155,9 +155,18 @@ class LibrarianService:
             return ["main"]
 
     def get_file_content(self, full_path: str) -> str:
-        """Read raw file content from disk."""
+        """Read raw file content from disk, translating frontend Docker paths."""
+        DOCKER_PREFIXES = ["/app/storage/repos/", "/storage/repos/"]
+        for prefix in DOCKER_PREFIXES:
+            if full_path.replace("\\", "/").startswith(prefix):
+                rel = full_path.replace("\\", "/")[len(prefix):]
+                full_path = os.path.join(settings.REPO_STORAGE_PATH, rel)
+                break
+
+        full_path = os.path.normpath(full_path)
+
         if not os.path.isfile(full_path):
-            return f"# Error: File not found â€” {full_path}"
+            return f"# Error: File not found — {full_path}"
         try:
             with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
                 return f.read()
@@ -382,9 +391,14 @@ class LibrarianService:
     def run_sonar_scan(self, repo_url: str) -> dict:
         """
         Task 4: Real-time SonarQube project scan.
+
+        Fast path  : returns cached SonarQube metrics immediately (< 1s).
+        Background : fires the actual Docker scanner in a daemon thread.
+                     When it finishes, the graph cache is hot-patched with
+                     fresh metrics — the next graph fetch returns updated data.
         """
         from app.core.sonar_client import sonar
-        
+
         # 1. Resolve project path
         if repo_url.startswith("http"):
             repo_name = repo_url.rstrip("/").split("/")[-1].replace(".git", "")
@@ -396,43 +410,64 @@ class LibrarianService:
         if not os.path.isdir(project_root):
             raise ValueError(f"Project path not found: {project_root}")
 
-        # 2. Trigger Docker Scan
-        print(f"[Librarian:Sonar] Starting full scan for {repo_name}...")
-        scan_success = sonar.run_scanner(project_root, repo_name)
-        
-        if not scan_success:
-            return {"status": "error", "message": "SonarScanner failed. Ensure Docker is running."}
+        # 2. Return current cached metrics immediately (no Docker wait)
+        cached_metrics = sonar.get_project_metrics(repo_name)
+        print(f"[Librarian:Sonar] Returning cached metrics for '{repo_name}'. Docker scan starting in background...")
 
-        # 3. Fetch Aggregate Metrics
-        metrics = sonar.get_project_metrics(repo_name)
-        
-        # 4. Update Graph Metadata (Hot-patch)
-        cache_file = os.path.join(project_root, "_kachow_graph.json")
-        if os.path.exists(cache_file):
-            try:
-                with open(cache_file, "r", encoding="utf-8") as f:
-                    graph_data = json.load(f)
-                
-                # Update project level health
-                graph_data["system_health"] = metrics.get("sqale_rating", 100) # Simple proxy
-                
-                # Fetch new metrics for EVERY file
-                for node in graph_data.get("nodes", []):
-                    if node["type"] == "file":
-                        node["sonar_health"] = sonar.get_file_metrics(node["id"], repo_name)
-                
-                with open(cache_file, "w", encoding="utf-8") as f:
-                    json.dump(graph_data, f, default=str)
-                
-                print(f"[Librarian:Sonar] Graph metrics updated for {repo_name}")
-            except Exception as e:
-                print(f"[Librarian:Sonar] Metadata update failed: {e}")
+        alert_system.add_alert(
+            title="🔍 Sonar Scan Queued",
+            message=f"Background scan started for '{repo_name}'. Metrics will refresh automatically when complete.",
+            severity="info",
+        )
+
+        # 3. Background: run Docker scanner + hot-patch cache
+        def _bg_scan():
+            print(f"[Librarian:Sonar] Background scan starting for {repo_name}...")
+            scan_success = sonar.run_scanner(project_root, repo_name)
+
+            if not scan_success:
+                alert_system.add_alert(
+                    title="⚠️ Sonar Scan Warning",
+                    message=f"Scanner did not complete cleanly for '{repo_name}'. Metrics may be partial.",
+                    severity="warning",
+                )
+                return
+
+            # Hot-patch: update graph cache with fresh per-file metrics
+            metrics = sonar.get_project_metrics(repo_name)
+            cache_file = os.path.join(project_root, "_kachow_graph.json")
+            if os.path.exists(cache_file):
+                try:
+                    with open(cache_file, "r", encoding="utf-8") as f:
+                        graph_data = json.load(f)
+
+                    for node in graph_data.get("nodes", []):
+                        if node.get("type") == "file":
+                            node["sonar_health"] = sonar.get_file_metrics(node["id"], repo_name)
+
+                    with open(cache_file, "w", encoding="utf-8") as f:
+                        json.dump(graph_data, f, default=str)
+
+                    print(f"[Librarian:Sonar] Graph cache updated with fresh metrics for '{repo_name}'")
+                except Exception as e:
+                    print(f"[Librarian:Sonar] Cache hot-patch failed: {e}")
+
+            alert_system.add_alert(
+                title="✅ Sonar Scan Complete",
+                message=f"'{repo_name}' scan finished. Quality gate: {metrics.get('quality_gate', 'PASSED')}. Refresh the graph to see updated metrics.",
+                severity="success" if metrics.get("quality_gate") == "OK" else "warning",
+            )
+
+        t = threading.Thread(target=_bg_scan, daemon=True, name=f"sonar-scan-{repo_name}")
+        t.start()
+        print(f"[Librarian:Sonar] Background scan thread started: {t.name}")
 
         return {
-            "status": "success",
-            "project_metrics": metrics,
-            "message": f"Real-time scan complete. System health: {metrics.get('quality_gate', 'PASSED')}"
+            "status": "scanning",
+            "project_metrics": cached_metrics,
+            "message": f"Scan queued for '{repo_name}'. Current cached metrics returned. Refresh graph in ~2-3 minutes for updated data.",
         }
+
 
     # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # FAST PATH â€” graph walk + AST only (no I/O to ChromaDB, no LLM)
@@ -951,12 +986,17 @@ Output ONLY markdown."""
             total_bugs += health.get("bugs", 0)
             file_count += 1
 
-        # 5. Update global health score in meta
-        # Simplified formula: health starts at 100, drops by 5 for every bug, min 0
+        # 5. Update global health score and quality gate in meta
+        project_metrics = sonar.get_project_metrics(repo_name)
         system_health = max(0, 100 - (total_bugs * 5))
+        
         if "metadata" not in graph_data:
             graph_data["metadata"] = {}
-        graph_data["metadata"]["system_health"] = system_health
+            
+        graph_data["metadata"]["system_health"] = project_metrics
+        graph_data["metadata"]["quality_gate"] = project_metrics.get("quality_gate", "PASSED")
+        graph_data["metadata"]["scan_status"] = project_metrics.get("status", "OK")
+        graph_data["metadata"]["metrics"] = project_metrics
         
         # 6. Save updated graph
         with open(cache_file, "w", encoding="utf-8") as f:
@@ -969,11 +1009,9 @@ Output ONLY markdown."""
         )
         
         return {
-            "success": True,
-            "project": repo_name,
-            "system_health": system_health,
-            "total_files_audited": file_count,
-            "total_bugs": total_bugs
+            "status": "success",
+            "project_metrics": project_metrics,
+            "message": f"Scan complete for {repo_name}. Found {total_bugs} bugs."
         }
 
 # Singleton used by the router

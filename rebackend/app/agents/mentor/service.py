@@ -204,7 +204,7 @@ Use this data to give actionable, specific, and precise answers. Base your logic
         )
 
     def get_starter_quest(self, repo_url: Optional[str] = None) -> StarterQuest:
-        """Fetch the easiest open SonarQube issue and gamify it."""
+        """Fetch the easiest open issue from the local analysis cache and gamify it."""
         project_key = "KA-CHOW"
         if repo_url:
             if repo_url.startswith("http"):
@@ -213,39 +213,57 @@ Use this data to give actionable, specific, and precise answers. Base your logic
                 project_key = os.path.basename(repo_url.rstrip("/\\"))
 
         try:
-            url = f"{sonar.base_url}/api/issues/search"
-            params = {
-                "componentKeys": project_key,
-                "statuses": "OPEN",
-                "severities": "MINOR,INFO",
-                "ps": 1,
-                "p": 1,
-            }
-            import requests
-            res = requests.get(url, params=params, auth=(sonar.token, ""), timeout=5)
+            # New LocalCodeAnalyzer cache format:
+            # sonar._cache[project_key] = { "_files": { "path/to/file.py": { "bugs": 1, ... } }, ... }
+            cache = sonar._cache.get(project_key, {})
+            files = cache.get("_files", {})
 
-            if res.status_code == 200:
-                issues = res.json().get("issues", [])
-                if issues:
-                    issue = issues[0]
-                    severity = issue.get("severity", "MINOR")
-                    component = issue.get("component", "").split(":")[-1]
-                    return StarterQuest(
-                        title=f"🔧 Fix: {issue.get('message', 'Code smell detected')[:60]}",
-                        issue_description=issue.get("message", "A code quality issue was found."),
-                        file_path=component or "Unknown file",
-                        xp_reward=_XP_MAP.get(severity, 50),
-                        sonar_link=f"{sonar.base_url}/project/issues?id={project_key}&open={issue.get('key')}",
-                    )
+            # Find the file with the most issues to create a quest
+            worst_file = None
+            max_issues = 0
+            issue_type = "smell"
+
+            for filepath, metrics in files.items():
+                bugs = metrics.get("bugs", 0)
+                vulns = metrics.get("vulnerabilities", 0)
+                smells = metrics.get("code_smells", 0)
+                
+                total = bugs + vulns + smells
+                if total > max_issues:
+                    max_issues = total
+                    worst_file = filepath
+                    if vulns > 0: issue_type = "vulnerability"
+                    elif bugs > 0: issue_type = "bug"
+                    else: issue_type = "smell"
+
+            if worst_file:
+                title_map = {
+                    "vulnerability": "🛡️ Security: Fix Vulnerabilities",
+                    "bug": "🐛 Bug Hunt: Squish the Bugs",
+                    "smell": "🧹 Code Janitor: Clean up Smells"
+                }
+                xp_map = {
+                    "vulnerability": _XP_MAP["CRITICAL"],
+                    "bug": _XP_MAP["MAJOR"],
+                    "smell": _XP_MAP["MINOR"]
+                }
+                
+                return StarterQuest(
+                    title=f"{title_map[issue_type]} in {os.path.basename(worst_file)}",
+                    issue_description=f"Local analysis found {max_issues} issue(s) in this file. Review the code and improve its quality.",
+                    file_path=worst_file,
+                    xp_reward=xp_map[issue_type],
+                    sonar_link="#", # Local analysis has no web UI link
+                )
         except Exception as e:
             print(f"⚠️ Quest fetch failed: {e}")
 
         return StarterQuest(
             title="🌱 Explore the Codebase",
-            issue_description="Read the architecture map and understand the agent patterns used in this project.",
+            issue_description="Read the architecture map and understand the agent patterns used in this project. Everything looks clean for now!",
             file_path="app/agents/",
             xp_reward=25,
-            sonar_link=f"{sonar.base_url}/projects",
+            sonar_link="#",
         )
 
     def get_onboarding_path(self, role: str) -> List[OnboardingStep]:
