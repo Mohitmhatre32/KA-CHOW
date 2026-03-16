@@ -21,6 +21,8 @@ import {
     Save,
     Trash2,
     BadgeCheck,
+    Clock,
+    Search,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -271,6 +273,7 @@ export function GuardianView() {
     const [error, setError] = useState<string | null>(null)
     const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle")
     const [showSaveToast, setShowSaveToast] = useState(false)
+    const [auditLogs, setAuditLogs] = useState<any[]>([])
 
     // ── Dynamic file state ───────────────────────────────────────────────────
     const [repoNodes, setRepoNodes] = useState<ApiGraphNode[]>([])
@@ -300,6 +303,19 @@ export function GuardianView() {
 
     useEffect(() => {
         refreshFromStore()
+        
+        // Load audit logs on mount
+        const loadLogs = async () => {
+            try {
+                const { getGuardianAuditLogs } = await import("@/lib/api")
+                const logs = await getGuardianAuditLogs()
+                setAuditLogs(logs)
+            } catch (err) {
+                console.error("Failed to load audit logs:", err)
+            }
+        }
+        loadLogs()
+
         window.addEventListener("active-repo-changed", refreshFromStore)
         return () => window.removeEventListener("active-repo-changed", refreshFromStore)
     }, [refreshFromStore])
@@ -966,13 +982,96 @@ export function GuardianView() {
                                 }
                             </div>
                         </div>
-                        <div className="flex gap-8 font-mono text-[10px] text-muted-foreground opacity-50 uppercase tracking-widest">
-                            <div className="flex items-center gap-2"><ShieldAlert className="h-3.5 w-3.5 text-destructive/40" /> Sonar Analysis</div>
-                            <div className="flex items-center gap-2"><CheckCircle className="h-3.5 w-3.5 text-success/40" /> Merge Enforcement</div>
-                            <div className="flex items-center gap-2"><Sparkles className="h-3.5 w-3.5 text-primary/40" /> Auto-Healing</div>
-                        </div>
                     </div>
                 )}
+
+                {/* ── DECISION HISTORY (Audit Log) ── */}
+                <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <Clock className="h-4 w-4 text-zinc-500" />
+                            <span className="font-mono text-xs font-semibold uppercase tracking-widest text-zinc-500">
+                                Decision History (Audit Log)
+                            </span>
+                        </div>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 gap-2 font-mono text-[10px] text-muted-foreground hover:text-foreground"
+                            onClick={async () => {
+                                try {
+                                    const { getGuardianAuditLogs } = await import("@/lib/api")
+                                    const logs = await getGuardianAuditLogs()
+                                    setAuditLogs(logs)
+                                } catch (err) {
+                                    console.error("Manual refresh failed:", err)
+                                }
+                            }}
+                        >
+                            <RefreshCw className="h-3 w-3" />
+                            Refresh Log
+                        </Button>
+                    </div>
+
+                    <div className="overflow-hidden rounded-xl border border-zinc-800/60 bg-zinc-950/40 backdrop-blur-sm">
+                        <table className="w-full border-collapse text-left">
+                            <thead>
+                                <tr className="border-b border-zinc-800/60 bg-zinc-900/40">
+                                    <th className="px-5 py-3 font-mono text-[10px] font-bold uppercase tracking-wider text-zinc-500">Timestamp</th>
+                                    <th className="px-5 py-3 font-mono text-[10px] font-bold uppercase tracking-wider text-zinc-500">File</th>
+                                    <th className="px-5 py-3 font-mono text-[10px] font-bold uppercase tracking-wider text-zinc-500">Status</th>
+                                    <th className="px-5 py-3 font-mono text-[10px] font-bold uppercase tracking-wider text-zinc-500">Decision</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {auditLogs && auditLogs.length > 0 ? (
+                                    auditLogs.map((log, i) => (
+                                        <tr key={i} className="group border-b border-zinc-900 transition-colors hover:bg-zinc-800/30">
+                                            <td className="whitespace-nowrap px-5 py-3 font-mono text-[10px] text-zinc-500">
+                                                {new Date(log.timestamp).toLocaleTimeString()}
+                                            </td>
+                                            <td className="px-5 py-3">
+                                                <div className="flex items-center gap-2">
+                                                    <FileCode className="h-3 w-3 text-zinc-600" />
+                                                    <span className="font-mono text-[11px] font-medium text-zinc-300 truncate max-w-[200px]">
+                                                        {log.file_name}
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            <td className="px-5 py-3">
+                                                <Badge
+                                                    variant="outline"
+                                                    className={`font-mono text-[9px] font-bold uppercase ${log.passed ? "border-emerald-500/30 text-emerald-400 bg-emerald-500/5" : "border-rose-500/30 text-rose-400 bg-rose-500/5"}`}
+                                                >
+                                                    {log.passed ? "PASSED" : "BLOCKED"}
+                                                </Badge>
+                                            </td>
+                                            <td className="px-5 py-3">
+                                                <div className="flex flex-col gap-0.5">
+                                                    <p className="font-mono text-[10px] text-zinc-400 line-clamp-1">{log.message}</p>
+                                                    {log.issues_count > 0 && (
+                                                        <span className="font-mono text-[9px] text-rose-500/60 italic">
+                                                            {log.issues_count} violations detected
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan={4} className="py-12 text-center">
+                                            <div className="flex flex-col items-center gap-2 opacity-30">
+                                                <Search className="h-8 w-8 text-zinc-500" />
+                                                <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">No logs found</p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
     )

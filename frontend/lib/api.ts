@@ -363,6 +363,23 @@ export async function guardianSaveCheck(req: EditorSaveRequest): Promise<EditorR
   }
 }
 
+export interface GuardianAuditRecord {
+  timestamp: string
+  file_name: string
+  passed: boolean
+  issues_count: number
+  message: string
+  issues: string[]
+}
+
+/**
+ * Fetches the trail of Guardian review decisions.
+ * Endpoint: GET /api/guardian/audit
+ */
+export async function getGuardianAuditLogs(): Promise<GuardianAuditRecord[]> {
+  return get<GuardianAuditRecord[]>("/api/guardian/audit")
+}
+
 // ─── Mentor Agent ─────────────────────────────────────────────────────────────
 
 export interface MentorChatResponse {
