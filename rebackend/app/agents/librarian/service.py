@@ -1,11 +1,11 @@
 """
-Librarian Service â€” The Core File Processing Pipeline
+Librarian Service  The Core File Processing Pipeline
 
-Pipeline stages (FAST PATH â€” graph returned in ~1-3s):
+Pipeline stages (FAST PATH  graph returned in ~1-3s):
   1. Resolve source (clone/pull or validate local path)
   2. Walk the file tree, skip noise dirs
   3. AST import analysis (Python) + heuristic for JS/TS
-  4. Return GraphResponse immediately â† FAST
+  4. Return GraphResponse immediately † FAST
 
 Background (non-blocking, runs after response sent):
   5. Chunk files and upsert into ChromaDB
@@ -37,7 +37,7 @@ from .models import GraphResponse, FileNode, CommitInfo, PullRequestInfo, Github
 import urllib.request
 import urllib.error
 
-# â”€â”€ Commit-type classifier 
+#  Commit-type classifier 
 _COMMIT_RE = re.compile(
     r"^(feat|fix|chore|docs|refactor|test|style|ci|build|perf)", re.IGNORECASE
 )
@@ -48,7 +48,7 @@ def _classify_commit(msg: str) -> str:
     return m.group(1).lower() if m else "other"
 
 
-# â”€â”€ Language detector â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+#  Language detector 
 _EXT_LANG: Dict[str, str] = {
     ".py": "python", ".js": "javascript", ".ts": "typescript",
     ".tsx": "typescript", ".jsx": "javascript", ".java": "java",
@@ -62,7 +62,7 @@ def _lang(ext: str) -> str:
     return _EXT_LANG.get(ext.lower(), "text")
 
 
-# â”€â”€ Token-aware chunker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+#  Token-aware chunker 
 def _chunk_text(text: str, max_tokens: int = settings.CHUNK_TOKEN_LIMIT) -> List[str]:
     """Split text into chunks of roughly max_tokens (word-count proxy)."""
     max_words = int(max_tokens * 0.75)
@@ -84,13 +84,13 @@ class LibrarianService:
     """
     Stateless pipeline orchestrator.
 
-    Fast path: clone â†’ walk â†’ AST â†’ return graph (1-3s).
+    Fast path: clone †’ walk †’ AST †’ return graph (1-3s).
     Slow path: embed + doc-gen run in a daemon thread after response is sent.
     """
 
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # 
     # PUBLIC API
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # 
 
     def process_request(self, input_source: str, branch: str = "main", force: bool = False) -> GraphResponse:
         """
@@ -194,7 +194,7 @@ class LibrarianService:
                     hash=c.hexsha[:7],
                     message=msg,
                     author=c.author.name,
-                    date=c.committed_datetime.strftime("%b %d, %Y Â· %H:%M"),
+                    date=c.committed_datetime.strftime("%b %d, %Y · %H:%M"),
                     commit_type=_classify_commit(msg),
                 ))
             print(f"[Librarian:History] Found {len(result)} commits")
@@ -268,11 +268,11 @@ class LibrarianService:
 
     def incremental_update(self, input_source: str) -> dict:
         """
-        Incremental Brain â€” Task 3 Implementation.
+        Incremental Brain  Task 3 Implementation.
         """
         t_start = time.time()
 
-        # â”€â”€ 1. Resolve project root â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        #  1. Resolve project root 
         if input_source.startswith("http"):
             repo_name = input_source.rstrip("/").split("/")[-1].replace(".git", "")
             project_root = os.path.join(settings.REPO_STORAGE_PATH, repo_name)
@@ -283,7 +283,7 @@ class LibrarianService:
         if not os.path.isdir(project_root):
             raise ValueError(f"Project path not found: {project_root}")
 
-        # â”€â”€ 2. Load cached graph â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        #  2. Load cached graph 
         cache_file = os.path.join(project_root, "_kachow_graph.json")
         if not os.path.exists(cache_file):
             raise FileNotFoundError("No cached graph found. Run full scan first.")
@@ -294,7 +294,7 @@ class LibrarianService:
         old_nodes_count = len(graph_data.get("nodes", []))
         repo = Repo(project_root, search_parent_directories=True)
 
-        # â”€â”€ 3. Delta Identification (Task 3: Git Diff) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        #  3. Delta Identification (Task 3: Git Diff) 
         changed_files: List[str] = []
         try:
             # We compare HEAD with HEAD~1 to find the "delta"
@@ -312,7 +312,7 @@ class LibrarianService:
                 "message": "Brain is up to date."
             }
 
-        # â”€â”€ 4. Partial Re-Ingestion & Metadata Layer (Task 2) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        #  4. Partial Re-Ingestion & Metadata Layer (Task 2) 
         from app.core.sonar_client import sonar # Import health database client
         
         # Helper to get file owner (GIT GPS)
@@ -364,20 +364,20 @@ class LibrarianService:
                 })
             vs.upsert_chunks(repo_name, chunks)
 
-        # â”€â”€ 5. Data Integrity Check (Task 3) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        #  5. Data Integrity Check (Task 3) 
         graph_data["nodes"] = list(nodes_map.values())
         new_nodes_count = len(graph_data["nodes"])
         if new_nodes_count < old_nodes_count:
              print("[Brain:Integrity] WARNING: Node count dropped. Verifying deletions...")
         
-        # â”€â”€ 6. Speed Benchmarking (Task 3: < 10s target) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        #  6. Speed Benchmarking (Task 3: < 10s target) 
         elapsed = round(time.time() - t_start, 2)
         baseline_estimate = old_nodes_count * 0.5 # 0.5s per file avg for full scan
         
         with open(cache_file, "w", encoding="utf-8") as f:
             json.dump(graph_data, f, default=str)
 
-        msg = f"âš¡ Brain updated {len(changed_files)} files in {elapsed}s (Target < 10s). Baseline scan: ~{baseline_estimate}s."
+        msg = f"¡ Brain updated {len(changed_files)} files in {elapsed}s (Target < 10s). Baseline scan: ~{baseline_estimate}s."
         alert_system.add_alert(title="Incremental Brain Ready", message=msg, severity="success")
         
         return {
@@ -390,9 +390,9 @@ class LibrarianService:
 
 
 
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    # FAST PATH â€” graph walk + AST only (no I/O to ChromaDB, no LLM)
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # 
+    # FAST PATH  graph walk + AST only (no I/O to ChromaDB, no LLM)
+    # 
 
     def _build_graph(self, root: str, name: str, branch: str):
         """
@@ -406,7 +406,7 @@ class LibrarianService:
         edges_data: List[Dict[str, str]] = []
         file_contents: Dict[str, str] = {}
 
-        # â”€â”€ PASS 1: Walk & map â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        #  PASS 1: Walk & map 
         for dirpath, dirnames, filenames in os.walk(root):
             dirnames[:] = [
                 d for d in dirnames
@@ -461,7 +461,7 @@ class LibrarianService:
                     module_map[mod] = rel_path
                     module_map[filename.replace(".py", "")] = rel_path
 
-        # â”€â”€ PASS 2: Python AST import edges â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        #  PASS 2: Python AST import edges 
         total_functions = 0
         documented_functions = 0
         for rel_path, content in file_contents.items():
@@ -486,7 +486,7 @@ class LibrarianService:
                     if ast.get_docstring(node):
                         documented_functions += 1
 
-        # â”€â”€ PASS 3: JS/TS heuristic edges â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        #  PASS 3: JS/TS heuristic edges 
         js_files = {
             p: c for p, c in file_contents.items()
             if p.endswith((".js", ".ts", ".tsx", ".jsx"))
@@ -511,9 +511,9 @@ class LibrarianService:
 
         return graph_response, G, file_contents, nodes_data, edges_data
 
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    # BACKGROUND WORK â€” embedding + docs + cache persistence
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # 
+    # BACKGROUND WORK  embedding + docs + cache persistence
+    # 
 
     def _run_background(
         self,
@@ -534,21 +534,21 @@ class LibrarianService:
                 self._generate_docs(name, root, nodes_data, edges_data)
                 self._save_cache(cache_file, graph_response)
                 alert_system.add_alert(
-                    title="ðŸ§  Embedding Complete",
+                    title="§  Embedding Complete",
                     message=f"Vector store updated with {graph_response.total_chunks_embedded} chunks. RAG is ready.",
                     severity="info",
                 )
             except Exception as e:
                 print(f"[Librarian:Background] Error: {e}")
                 alert_system.add_alert(
-                    title="âš ï¸ Background Task Warning",
+                    title=" ï¸ Background Task Warning",
                     message=f"Non-critical background processing failed: {e}",
                     severity="warning",
                 )
 
         t = threading.Thread(target=_worker, daemon=True, name=f"librarian-bg-{name}")
         t.start()
-        print(f"[Librarian] graph returned â€” background work started (thread: {t.name})")
+        print(f"[Librarian] graph returned  background work started (thread: {t.name})")
 
     def _embed_chunks(self, name: str, file_contents: Dict[str, str], graph_response: GraphResponse):
         """Upsert file chunks into ChromaDB vector store."""
@@ -581,9 +581,9 @@ class LibrarianService:
         except Exception as e:
             print(f"[Librarian:bg] ChromaDB upsert failed: {e}")
 
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    # CLONE / PULL â€” already fast (git protocol)
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # 
+    # CLONE / PULL  already fast (git protocol)
+    # 
 
     def _clone_or_pull(self, url: str, branch: str) -> str:
         repo_name = url.rstrip("/").split("/")[-1].replace(".git", "")
@@ -600,14 +600,14 @@ class LibrarianService:
                 print(f"[Librarian:Clone] Pull failed, using existing clone: {e}")
         else:
             print(f"[Librarian:Clone] Cloning {repo_name}@{branch}...")
-            # shallow clone: only latest commit â€” much faster for large repos
+            # shallow clone: only latest commit  much faster for large repos
             Repo.clone_from(url, target, branch=branch, depth=1)
 
         return target
 
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # 
     # HELPERS
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # 
 
     @staticmethod
     def _extract_imports(tree: ast.AST) -> List[str]:
@@ -680,14 +680,14 @@ class LibrarianService:
             return "module"
         return "file"
 
-    # â”€â”€ Cache helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    #  Cache helpers 
 
     @staticmethod
     def _save_cache(cache_file: str, resp: GraphResponse):
         try:
             with open(cache_file, "w", encoding="utf-8") as f:
                 json.dump(resp.model_dump(), f, default=str)
-            print(f"[Librarian:bg] cache written â†’ {cache_file}")
+            print(f"[Librarian:bg] cache written †’ {cache_file}")
         except Exception as e:
             print(f"[Librarian:bg] cache write failed: {e}")
 
@@ -699,7 +699,7 @@ class LibrarianService:
         data["from_cache"] = True
         resp = GraphResponse(**data)
         alert_system.add_alert(
-            title="âš¡ Cache Hit",
+            title="¡ Cache Hit",
             message=f"Returned cached graph for '{resp.project_name}' instantly. Use force=true to re-scan.",
             severity="info",
         )
@@ -822,13 +822,13 @@ Output ONLY markdown."""
         REQUIREMENTS:
         1. Use professional, clear, and high-agency language.
         2. STRUCTURE (industry-standard):
-           - # Project Title & Overview: What is this project?
-           - ## ðŸ›  Tech Stack: List core languages, frameworks, and tools.
-           - ## ðŸš€ Installation & Setup: Clear, step-by-step commands (pip, npm, docker, etc.).
-           - ## ðŸ— Architecture Overview: Describe the system design based on the architecture snapshot.
-           - ## ðŸ§ª Testing & Quality: How to run tests and verify changes.
-           - ## ðŸ“– API Documentation (if applicable): Key endpoints or patterns.
-           - ## ðŸ¤ Contributing: Guidelines for developers.
+           - ## Project Title & Overview: What is this project?
+           - ##  Tech Stack: List core languages, frameworks, and tools.
+           - ## Installation & Setup: Clear, step-by-step commands (pip, npm, docker, etc.).
+           - ## Architecture Overview: Describe the system design based on the architecture snapshot.
+           - ## Testing & Quality: How to run tests and verify changes.
+           - ## API Documentation (if applicable): Key endpoints or patterns.
+           - ## Contributing: Guidelines for developers.
         3. DONT BE GENERIC: Look at the config files to deduce EXACT installation steps.
         
         OUTPUT ONLY THE MARKDOWN CONTENT.
