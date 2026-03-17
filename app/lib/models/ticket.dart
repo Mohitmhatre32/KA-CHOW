@@ -1,6 +1,7 @@
 class Ticket {
   final String id;
   final String title;
+  final String description;
   final String status;
   final String priority;
   final String assignee;
@@ -9,6 +10,7 @@ class Ticket {
   Ticket({
     required this.id,
     required this.title,
+    required this.description,
     required this.status,
     required this.priority,
     required this.assignee,
@@ -19,6 +21,7 @@ class Ticket {
     return Ticket(
       id: json['id'],
       title: json['title'],
+      description: json['description'] ?? '',
       status: json['status'],
       priority: json['priority'],
       assignee: json['assignee'],

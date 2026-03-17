@@ -6,7 +6,7 @@ class AppConstants {
   
   // API Endpoints
   static const String metricsEndpoint = '/api/mobile/status';
-  static const String chatEndpoint = '/api/v1/mentor/chat';
+  static const String chatEndpoint = '/api/mentor/chat';
   static const String alertsEndpoint = '/api/alerts';
   
   // Padding & Spacing

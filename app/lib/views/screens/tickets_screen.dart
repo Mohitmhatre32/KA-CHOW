@@ -18,7 +18,11 @@ class TicketManagementScreen extends ConsumerWidget {
       backgroundColor: Colors.transparent,
       builder: (context) => CreateTicketSheet(
         onCreate: (title, description, priority) {
-          ref.read(ticketsProvider.notifier).createTicket(title, description, priority: priority);
+          // Without a specific project context from the global screen, we use a default or ask the user.
+          // For simplicity in this flow, we assign them to a "Global" project bin or the first repo.
+          // Since the user asked "tcikets created in the app should be shown in the dropdown", they are likely testing from repo dashboard.
+          // So we'll pass 'Global' here, but prompt them to use the repo dashboard for repo-specific tickets.
+          ref.read(ticketsProvider.notifier).createTicket('Global', title, description, priority: priority);
         },
       ),
     );
@@ -33,7 +37,7 @@ class TicketManagementScreen extends ConsumerWidget {
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         title: Text(
-          'TICKET ENGINE',
+          'TICKETS',
           style: GoogleFonts.orbitron(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 2),
         ),
         centerTitle: true,
@@ -157,7 +161,7 @@ class TicketManagementScreen extends ConsumerWidget {
                 const Spacer(),
                 if (ticket.status != 'Closed')
                   TextButton(
-                    onPressed: () => ref.read(ticketsProvider.notifier).closeTicket(ticket.id),
+                    onPressed: () => ref.read(ticketsProvider.notifier).closeTicket(ticket.id, ticket.description), // description stores project_name right now
                     child: Text('CLOSE', style: TextStyle(color: AppColors.neonGreen, fontWeight: FontWeight.bold, fontSize: 12)),
                   )
                 else

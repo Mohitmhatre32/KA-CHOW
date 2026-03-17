@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import {
     Compass,
     FileJson,
@@ -31,8 +31,10 @@ import {
     getFileContent,
     syncJiraTicket,
     createJiraTasks,
+    getAppTasks,
     type ScaffoldResponse,
     type ImpactResult,
+    type AppTask,
 } from "@/lib/api"
 import { getActiveRepo } from "@/lib/repo-store"
 
@@ -255,6 +257,21 @@ export function ArchitectView() {
     const [isSyncingJira, setIsSyncingJira] = useState(false)
     const [jiraSuccess, setJiraSuccess] = useState<string | null>(null)
 
+    const [appTasks, setAppTasks] = useState<AppTask[]>([])
+    const [ticketSource, setTicketSource] = useState<"app" | "jira">("app")
+    const activeRepo = getActiveRepo()
+
+    // Fetch local tasks created from mobile app on load
+    useEffect(() => {
+        if (activeRepo?.repo_name) {
+            setIsSyncingJira(true)
+            getAppTasks(activeRepo.repo_name)
+                .then(setAppTasks)
+                .catch(console.error)
+                .finally(() => setIsSyncingJira(false))
+        }
+    }, [activeRepo?.repo_name])
+
     const handleJiraSync = useCallback(async () => {
         if (!jiraKeyInput.trim()) {
             setError("Please enter a Jira ticket key to sync.")
@@ -406,28 +423,113 @@ export function ArchitectView() {
                         </div>
 
                         <div className="flex flex-col gap-2 mb-2 rounded-xl border border-zinc-800/80 bg-zinc-950/50 p-3">
-                            <label className="font-mono text-[10px] uppercase tracking-wider text-zinc-600">
-                                Jira Ticket Sync
-                            </label>
-                            <div className="flex gap-2">
-                                <input
-                                    type="text"
-                                    placeholder="e.g. TICKET-123"
-                                    value={jiraKeyInput}
-                                    onChange={(e) => setJiraKeyInput(e.target.value)}
-                                    className="flex-1 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-1.5 font-mono text-xs text-zinc-300 outline-none placeholder:text-zinc-600 focus:border-cyan-500/40"
-                                />
-                                <Button
-                                    onClick={handleJiraSync}
-                                    disabled={isSyncingJira || !jiraKeyInput.trim()}
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-8 gap-2 border-primary/30 text-primary hover:bg-primary/10"
-                                >
-                                    {isSyncingJira ? <RefreshCw className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                                    Sync
-                                </Button>
+                            <div className="flex items-center justify-between">
+                                <label className="font-mono text-[10px] uppercase tracking-wider text-zinc-600">
+                                    Ticket Source
+                                </label>
+                                <div className="flex gap-4">
+                                    <label className="flex items-center gap-1.5 cursor-pointer font-mono text-[10px] text-zinc-400">
+                                        <input 
+                                            type="radio" 
+                                            name="ticketSource" 
+                                            value="app" 
+                                            checked={ticketSource === "app"}
+                                            onChange={() => {
+                                                setTicketSource("app")
+                                                setJiraKeyInput("")
+                                                setJiraSuccess(null)
+                                            }}
+                                            className="accent-primary"
+                                        />
+                                        Local App
+                                    </label>
+                                    <label className="flex items-center gap-1.5 cursor-pointer font-mono text-[10px] text-zinc-400">
+                                        <input 
+                                            type="radio" 
+                                            name="ticketSource" 
+                                            value="jira" 
+                                            checked={ticketSource === "jira"}
+                                            onChange={() => {
+                                                setTicketSource("jira")
+                                                setJiraKeyInput("")
+                                                setJiraSuccess(null)
+                                            }}
+                                            className="accent-primary"
+                                        />
+                                        Jira Cloud
+                                    </label>
+                                </div>
                             </div>
+                            
+                            {ticketSource === "app" ? (
+                                <div className="flex gap-2 mt-1">
+                                    <select
+                                        value={jiraKeyInput}
+                                        onChange={(e) => {
+                                            const val = e.target.value
+                                            setJiraKeyInput(val)
+                                            const task = appTasks.find(t => t.id === val)
+                                            if (task) {
+                                                const formatted = JSON.stringify({
+                                                    ticket: task.id,
+                                                    summary: task.title,
+                                                    status: task.status,
+                                                    linked_files: task.linked_nodes
+                                                }, null, 2)
+                                                setJiraInput(formatted)
+                                                setJiraSuccess(`Selected ${task.id}: ${task.title}`)
+                                            }
+                                        }}
+                                        className="flex-1 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-1.5 font-mono text-xs text-zinc-300 outline-none focus:border-cyan-500/40"
+                                    >
+                                        <option value="">-- Select a Ticket --</option>
+                                        {appTasks.map(t => (
+                                            <option key={t.id} value={t.id}>
+                                                {t.id} - {t.title}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <Button
+                                        onClick={() => {
+                                            if (activeRepo?.repo_name) {
+                                                setIsSyncingJira(true)
+                                                getAppTasks(activeRepo.repo_name)
+                                                    .then(setAppTasks)
+                                                    .catch(console.error)
+                                                    .finally(() => setIsSyncingJira(false))
+                                            }
+                                        }}
+                                        disabled={isSyncingJira || !activeRepo}
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-8 gap-2 border-primary/30 text-primary hover:bg-primary/10"
+                                    >
+                                        {isSyncingJira ? <RefreshCw className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                                        Refresh
+                                    </Button>
+                                </div>
+                            ) : (
+                                <div className="flex gap-2 mt-1">
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. TICKET-123"
+                                        value={jiraKeyInput}
+                                        onChange={(e) => setJiraKeyInput(e.target.value)}
+                                        className="flex-1 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-1.5 font-mono text-xs text-zinc-300 outline-none placeholder:text-zinc-600 focus:border-cyan-500/40"
+                                    />
+                                    <Button
+                                        onClick={handleJiraSync}
+                                        disabled={isSyncingJira || !jiraKeyInput.trim()}
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-8 gap-2 border-primary/30 text-primary hover:bg-primary/10"
+                                    >
+                                        {isSyncingJira ? <RefreshCw className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                                        Sync
+                                    </Button>
+                                </div>
+                            )}
+                            
                             {jiraSuccess && (
                                 <p className="font-mono text-[10px] text-emerald-400 mt-1">{jiraSuccess}</p>
                             )}

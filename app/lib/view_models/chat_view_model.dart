@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/legacy.dart';
+import '../core/constants.dart';
 import '../models/chat.dart';
 import '../services/api_service.dart';
 
@@ -40,13 +41,18 @@ class ChatViewModel extends StateNotifier<ChatState> {
     );
 
     try {
-      // Simulate intent detection for Jira-replacement demo
-      bool isTicketIntent = text.toLowerCase().contains('create ticket') || 
-                           text.toLowerCase().contains('new ticket');
+      // Detect ticket-creation intent
+      final isTicketIntent = text.toLowerCase().contains('create ticket') ||
+          text.toLowerCase().contains('new ticket');
 
+      // Use the correct Mentor endpoint with proper field names
       final response = await _apiService.post(
-        '/api/v1/mentor/chat',
-        data: {'prompt': text, 'repo_url': ''},
+        AppConstants.chatEndpoint,
+        data: {
+          'question': text,
+          'user_role': 'developer',
+          'repo_url': '',
+        },
       );
 
       final mentorResponse = MentorResponse.fromJson(response.data);

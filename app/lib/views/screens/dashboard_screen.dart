@@ -27,7 +27,7 @@ class DashboardScreen extends ConsumerWidget {
                 stretch: true,
                 backgroundColor: Colors.transparent,
                 title: Text(
-                  'SYSTEM DASHBOARD',
+                  'SYSTEM STATS',
                   style: GoogleFonts.orbitron(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -53,7 +53,7 @@ class DashboardScreen extends ConsumerWidget {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          '98.4%',
+                          '${metrics.codeQuality.toStringAsFixed(1)}%',
                           style: TextStyle(
                             fontSize: 48,
                             fontWeight: FontWeight.bold,

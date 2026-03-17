@@ -14,6 +14,7 @@ from app.agents.architect.router import router as architect_router
 from app.agents.guardian.router import router as guardian_router
 from app.agents.guardian.webhook_router import router as guardian_webhook
 from app.agents.mentor.router import router as mentor_router
+from app.agents.pm_router import router as pm_router
 from app.api.mobile import router as mobile_router
 
 app = FastAPI(
@@ -42,6 +43,7 @@ app.include_router(architect_router, prefix="/api/architect", tags=["🏗️ Arc
 app.include_router(guardian_router,  prefix="/api/guardian",  tags=["🛡️ Guardian"])
 app.include_router(guardian_webhook, prefix="/api/guardian",  tags=["🛡️ Guardian Webhook"])
 app.include_router(mentor_router,    prefix="/api/mentor",    tags=["🎓 Mentor"])
+app.include_router(pm_router,        prefix="/api/tasks",     tags=["📊 PM"])
 app.include_router(mobile_router, prefix="/api/mobile", tags=["Mobile Adapter"])
 
 # ── Static Files (Validation UI) ──────────────────────────────────────────────

@@ -16,39 +16,44 @@ final ticketAnalyticsProvider = FutureProvider<TicketAnalytics>((ref) async {
 class TicketsViewModel extends StateNotifier<AsyncValue<List<Ticket>>> {
   final ApiService _apiService;
 
-  TicketsViewModel(this._apiService) : super(const AsyncValue.loading()) {
-    fetchTickets();
-  }
+  TicketsViewModel(this._apiService) : super(const AsyncValue.loading());
 
-  Future<void> fetchTickets() async {
+  Future<void> fetchTickets(String projectName) async {
     state = const AsyncValue.loading();
     try {
-      final response = await _apiService.get('/api/mobile/tickets');
+      final response = await _apiService.get('/api/tasks/${Uri.encodeComponent(projectName)}');
       final List<dynamic> data = response.data;
-      final tickets = data.map((json) => Ticket.fromJson(json)).toList();
+      final tickets = data.map((json) => Ticket(
+        id: json['id'],
+        title: json['title'],
+        description: json['project_name'] ?? '', // Store project name here
+        status: json['status'] == 'resolved' ? 'Closed' : 'Open',
+        priority: 'Medium', // Defaulting as backend doesn't store priority currently
+        createdAt: 'Just now',
+        assignee: 'Mobile App',
+      )).toList();
       state = AsyncValue.data(tickets);
     } catch (e, stack) {
       state = AsyncValue.error(e, stack);
     }
   }
 
-  Future<void> closeTicket(String ticketId) async {
+  Future<void> closeTicket(String ticketId, String projectName) async {
     try {
-      await _apiService.post('/api/mobile/tickets/$ticketId/close');
-      fetchTickets();
+      await _apiService.post('/api/tasks/$ticketId/close');
+      fetchTickets(projectName);
     } catch (e) {
       // Handle error
     }
   }
   
-  Future<void> createTicket(String title, String description, {String priority = 'Medium'}) async {
+  Future<void> createTicket(String projectName, String title, String description, {String priority = 'Medium'}) async {
     try {
-      await _apiService.post('/api/mobile/tickets', data: {
-        'title': title,
-        'description': description,
-        'priority': priority,
+      await _apiService.post('/api/tasks/create', data: {
+        'project_name': projectName,
+        'description': '$title - $description',
       });
-      fetchTickets();
+      fetchTickets(projectName);
     } catch (e) {
       // Handle error
     }

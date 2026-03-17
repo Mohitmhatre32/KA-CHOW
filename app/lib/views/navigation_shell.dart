@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/constants.dart';
 import 'screens/dashboard_screen.dart';
-import 'screens/alerts_screen.dart';
 import 'screens/tickets_screen.dart';
 import 'screens/chat_screen.dart';
+import 'screens/store_screen.dart';
 
 class MainNavigationShell extends StatefulWidget {
   const MainNavigationShell({super.key});
@@ -17,9 +17,9 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   int _currentIndex = 0;
 
   final List<Widget> _screens = [
+    const StoreScreen(),
     const DashboardScreen(),
     const TicketManagementScreen(),
-    const AlertsScreen(),
     const ChatScreen(),
   ];
 
@@ -39,9 +39,14 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
           type: BottomNavigationBarType.fixed,
           selectedItemColor: AppColors.primary,
           unselectedItemColor: Colors.white24,
-          selectedLabelStyle: GoogleFonts.orbitron(fontSize: 10, fontWeight: FontWeight.bold),
-          unselectedLabelStyle: GoogleFonts.orbitron(fontSize: 10),
+          selectedLabelStyle: GoogleFonts.orbitron(fontSize: 9, fontWeight: FontWeight.bold),
+          unselectedLabelStyle: GoogleFonts.orbitron(fontSize: 9),
           items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.dashboard_outlined),
+              activeIcon: Icon(Icons.dashboard),
+              label: 'DASHBOARD',
+            ),
             BottomNavigationBarItem(
               icon: Icon(Icons.analytics_outlined),
               activeIcon: Icon(Icons.analytics),
@@ -51,11 +56,6 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
               icon: Icon(Icons.confirmation_number_outlined),
               activeIcon: Icon(Icons.confirmation_number),
               label: 'TICKETS',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.notifications_outlined),
-              activeIcon: Icon(Icons.notifications),
-              label: 'ALERTS',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.psychology_outlined),
@@ -68,3 +68,4 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     );
   }
 }
+

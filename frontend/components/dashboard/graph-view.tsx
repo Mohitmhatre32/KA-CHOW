@@ -70,6 +70,10 @@ export function GraphView() {
   const [isIncremental, setIsIncremental] = useState(false)
   const [incrementalResult, setIncrementalResult] = useState<IncrementalUpdateResult | null>(null)
 
+  // Mobile Task Integration
+  const [activeTasks, setActiveTasks] = useState<any[]>([])
+  const [maintenanceNodes, setMaintenanceNodes] = useState<Set<string>>(new Set())
+
   const { nodes: rawNodes, graphMeta, isLive, isRefreshing, refresh } = useGraphData()
   const [nodes, setNodes] = useState<(GraphNode & d3.SimulationNodeDatum)[]>([])
 
@@ -108,6 +112,43 @@ export function GraphView() {
       simulation.stop()
     }
   }, [rawNodes])
+
+  // --- Mobile Tasks Polling ---
+  useEffect(() => {
+    if (!graphMeta?.repo_name) return
+    let mounted = true
+
+    const fetchTasks = async () => {
+      try {
+        // Needs absolute URL if running outside Next.js API domain, or relative if proxied.
+        const activeRepo = getActiveRepo()
+        // If we can construct the backend URL easily, we just use localhost:8000 or the same origin.
+        // For simplicity in the app, we assume backend is on port 8000.
+        const res = await fetch(`http://localhost:8000/api/tasks/${graphMeta.repo_name}`)
+        if (res.ok && mounted) {
+          const tasks = await res.json()
+          setActiveTasks(tasks)
+          
+          const mNodes = new Set<string>()
+          tasks.forEach((t: any) => {
+            if (t.status === 'open' && t.linked_nodes) {
+              t.linked_nodes.forEach((n: string) => mNodes.add(n))
+            }
+          })
+          setMaintenanceNodes(mNodes)
+        }
+      } catch (e) {
+        console.error("Failed to fetch active tasks", e)
+      }
+    }
+
+    fetchTasks()
+    const intervalId = setInterval(fetchTasks, 3000)
+    return () => {
+      mounted = false
+      clearInterval(intervalId)
+    }
+  }, [graphMeta?.repo_name])
 
   const edges = useMemo(() => {
     const lines: any[] = []
@@ -441,6 +482,7 @@ export function GraphView() {
           }
 
           const isDimmed = activeNodeId !== null && !isActive && !isNeighbor
+          const isUnderMaintenance = maintenanceNodes.has(node.id)
           const IconComponent = typeIcons[node.type]
           const radius = isActive ? 22 : 18
 
@@ -454,6 +496,15 @@ export function GraphView() {
               onClick={(e) => { e.stopPropagation(); setSelectedNodeId(node.id); }}
               className={`node-group cursor-pointer group transition-opacity duration-300 ${isDimmed ? 'opacity-20' : 'opacity-100'}`}
             >
+              {isUnderMaintenance && (
+                <circle
+                  r={radius + 6}
+                  stroke="#a855f7" // Purple-500
+                  strokeWidth="2"
+                  fill="none"
+                  className="animate-pulse drop-shadow-[0_0_15px_rgba(168,85,247,0.6)]"
+                />
+              )}
               <circle
                 r={radius}
                 fill={typeColors[node.type]}

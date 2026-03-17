@@ -287,6 +287,18 @@ export async function createJiraTasks(parentKey: string, tasks: string[]): Promi
   })
 }
 
+export interface AppTask {
+  id: string
+  project_name: string
+  title: string
+  status: string
+  linked_nodes: string[]
+}
+
+export async function getAppTasks(projectName: string): Promise<AppTask[]> {
+  return get<AppTask[]>(`/api/tasks/${encodeURIComponent(projectName)}`)
+}
+
 // ─── Guardian Agent ───────────────────────────────────────────────────────────
 
 export interface PRReviewRequest {
