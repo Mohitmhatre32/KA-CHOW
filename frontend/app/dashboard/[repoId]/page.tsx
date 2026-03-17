@@ -13,6 +13,7 @@ import {
   Loader2,
   LayoutGrid,
   GitFork,
+  MonitorPlay,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -39,12 +40,13 @@ import { HealthPanel } from "@/components/dashboard/health-panel"
 import { GuardianView } from "@/components/dashboard/guardian-view"
 import { MentorView } from "@/components/dashboard/mentor-view"
 import { ArchitectView } from "@/components/dashboard/architect-view"
+import { DiagramView } from "@/components/dashboard/diagram-view"
 import { AlertsInbox } from "@/components/dashboard/alerts-inbox"
 
 // Utilities
 import { getActiveRepo, setActiveRepoId, getAllRepos, upsertRepo } from "@/lib/repo-store"
 
-type MainView = "graph" | "guardian" | "architect" | "mentor"
+type MainView = "graph" | "guardian" | "architect" | "mentor" | "diagram"
 type PanelType = "health" | null
 
 export default function DashboardPage() {
@@ -269,6 +271,14 @@ export default function DashboardPage() {
             <div className="my-2 h-px bg-border" />
 
             <AgentTab
+              active={mainView === "diagram"}
+              onClick={() => toggleMainView("diagram")}
+              icon={MonitorPlay}
+              title="The Visualizer"
+              subtitle="Architecture Diagram"
+              variant="primary"
+            />
+            <AgentTab
               active={mainView === "guardian"}
               onClick={() => toggleMainView("guardian")}
               icon={ShieldAlert}
@@ -312,6 +322,10 @@ export default function DashboardPage() {
             ) : mainView === "architect" ? (
               <div className="animate-in fade-in slide-in-from-bottom-2 h-full duration-300">
                 <ArchitectView />
+              </div>
+            ) : mainView === "diagram" ? (
+              <div className="animate-in fade-in slide-in-from-bottom-2 h-full duration-300">
+                <DiagramView />
               </div>
             ) : (
               <GraphView />

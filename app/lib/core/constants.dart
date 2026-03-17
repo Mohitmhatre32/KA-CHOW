@@ -1,8 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 class AppConstants {
   static const String appName = 'KA-CHOW';
-  static const String baseUrl = 'http://10.0.2.2:8000'; // Special IP for Android Emulator to access host localhost
+  static String get baseUrl => kIsWeb ? 'http://localhost:8000' : 'http://10.0.2.2:8000';
   
   // API Endpoints
   static const String metricsEndpoint = '/api/mobile/status';

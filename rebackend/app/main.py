@@ -15,6 +15,7 @@ from app.agents.guardian.router import router as guardian_router
 from app.agents.guardian.webhook_router import router as guardian_webhook
 from app.agents.mentor.router import router as mentor_router
 from app.agents.pm_router import router as pm_router
+from app.agents.diagram.router import router as diagram_router
 from app.api.mobile import router as mobile_router
 
 app = FastAPI(
@@ -44,6 +45,7 @@ app.include_router(guardian_router,  prefix="/api/guardian",  tags=["🛡️ Gua
 app.include_router(guardian_webhook, prefix="/api/guardian",  tags=["🛡️ Guardian Webhook"])
 app.include_router(mentor_router,    prefix="/api/mentor",    tags=["🎓 Mentor"])
 app.include_router(pm_router,        prefix="/api/tasks",     tags=["📊 PM"])
+app.include_router(diagram_router,   prefix="/api/diagram",   tags=["🖼️ Diagram"])
 app.include_router(mobile_router, prefix="/api/mobile", tags=["Mobile Adapter"])
 
 # ── Static Files (Validation UI) ──────────────────────────────────────────────
@@ -71,6 +73,7 @@ def health():
             "architect": "ONLINE",
             "guardian":  "ONLINE",
             "mentor":    "ONLINE",
+            "diagram":   "ONLINE",
         },
         "unread_alerts": alert_system.unread_count,
     }

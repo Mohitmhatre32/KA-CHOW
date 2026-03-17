@@ -238,9 +238,9 @@ function FileSelectorPanel({
                             >
                                 <FileCode className="h-3 w-3 shrink-0 text-zinc-500" />
                                 <span className="truncate">{node.id}</span>
-                                {node.sonar_health?.bugs > 0 && (
+                                {((node.sonar_health?.bugs as number) ?? 0) > 0 && (
                                     <span className="ml-auto rounded-full bg-rose-500/20 px-1.5 py-0.5 text-[9px] text-rose-400">
-                                        {node.sonar_health.bugs} bug{node.sonar_health.bugs !== 1 ? "s" : ""}
+                                        {node.sonar_health?.bugs} bug{node.sonar_health?.bugs !== 1 ? "s" : ""}
                                     </span>
                                 )}
                             </button>
@@ -801,7 +801,7 @@ export function GuardianView() {
 
                         {/* ── SELF-HEALING SECTION ── */}
                         <div className="space-y-4">
-                            <div className="flex items-center justify-between">
+                            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                                 <div className="flex items-center gap-2">
                                     <Sparkles className="h-4 w-4 text-zinc-500" />
                                     <span className="font-mono text-xs font-semibold uppercase tracking-widest text-zinc-500">
@@ -818,7 +818,7 @@ export function GuardianView() {
                                         disabled={viewState === "healing"}
                                         variant="outline"
                                         size="lg"
-                                        className={`relative w-full gap-2.5 font-mono text-sm font-bold border-success/40 text-success hover:bg-success/10 transition-all duration-300 ${viewState === "healing" ? "opacity-50" : ""}`}
+                                        className={`relative w-full sm:w-auto gap-2.5 font-mono text-sm font-bold border-success/40 text-success bg-success/5 backdrop-blur-md hover:bg-success/15 transition-all duration-300 ${viewState === "healing" ? "opacity-50" : ""}`}
                                     >
                                         {viewState === "healing" ? (
                                             <RefreshCw className="h-4 w-4 animate-spin" />

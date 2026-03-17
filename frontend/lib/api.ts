@@ -536,27 +536,25 @@ export async function clearAlerts(): Promise<void> {
   if (!res.ok) throw new Error("Failed to clear alerts")
 }
 
-// ─── GitHub OAuth (Stubs — returns safe empty data) ───────────────────────────
+// ─── Diagram Agent ────────────────────────────────────────────────────────────
 
-export interface GithubRepo {
-  id: number
-  name: string
-  full_name: string
-  html_url: string
-  clone_url: string
-  private: boolean
-  description: string | null
-  default_branch: string
+export interface DiagramRequest {
+  repo_url: string
+  diagram_type?: string
+  prompt_override?: string
 }
 
-export async function getGithubClientId(): Promise<{ client_id: string }> {
-  return get<{ client_id: string }>("/api/github/client-id")
+export interface DiagramResponse {
+  repo_url: string
+  diagram_type: string
+  mermaid_markdown: string
+  message: string
 }
 
-export async function exchangeGithubToken(code: string): Promise<{ access_token: string }> {
-  return post<{ access_token: string }>("/api/github/token", { code })
-}
-
-export async function getUserRepos(token: string): Promise<GithubRepo[]> {
-  return post<GithubRepo[]>("/api/github/repos", { token })
+/**
+ * Generates an architecture diagram for an ingested repository.
+ * Endpoint: POST /api/diagram/generate
+ */
+export async function generateArchitectureDiagram(req: DiagramRequest): Promise<DiagramResponse> {
+  return post<DiagramResponse>("/api/diagram/generate", req)
 }
