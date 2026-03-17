@@ -183,14 +183,14 @@ export function DiagramView() {
                     {/* Canvas Area */}
                     <div className="flex-1 overflow-auto relative flex items-center justify-center p-6">
                         {!diagramData && !loading && (
-                            <div className="flex flex-col items-center gap-4 text-center max-w-sm">
-                                <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mb-2 shadow-[0_0_30px_rgba(56,189,248,0.15)]">
+                            <div className="absolute inset-0 flex items-center justify-center bg-background/50 backdrop-blur-sm z-10 transition-all">
+                                <div className="flex flex-col items-center gap-4">
                                     <MonitorPlay className="h-8 w-8 text-primary/60" />
+                                    <h3 className="font-mono text-sm font-bold text-zinc-300 uppercase tracking-wider">Empty Canvas</h3>
+                                    <p className="font-sans text-sm text-zinc-500 leading-relaxed">
+                                        Click "Generate Diagram" to prompt the Visualizer AI to construct a high-level system mapping based on the active repository graph.
+                                    </p>
                                 </div>
-                                <h3 className="font-mono text-sm font-bold text-zinc-300 uppercase tracking-wider">Empty Canvas</h3>
-                                <p className="font-sans text-sm text-zinc-500 leading-relaxed">
-                                    Click "Generate Diagram" to prompt the Visualizer AI to construct a high-level system mapping based on the active repository graph.
-                                </p>
                             </div>
                         )}
                         
