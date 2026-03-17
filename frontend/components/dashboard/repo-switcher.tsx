@@ -56,6 +56,7 @@ export function RepoSwitcher() {
         setActiveRepoId(id)
         setActiveId(id)
         window.dispatchEvent(new Event("active-repo-changed"))
+        router.push(`/dashboard/${id}`)
     }
 
     const handleDelete = (e: React.MouseEvent, id: string) => {

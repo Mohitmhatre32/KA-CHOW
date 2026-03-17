@@ -110,6 +110,8 @@ export interface GraphNode {
   sonar_health?: Record<string, any>
   path?: string
   layer?: string
+  owner?: string
+  jira_tickets?: string[]
 }
 
 export const graphNodes: GraphNode[] = [

@@ -18,38 +18,38 @@ import { getAlerts, markAlertRead, markAllAlertsRead, clearAlerts, type Alert } 
 const SEVERITY_CONFIG = {
     critical: {
         icon: ShieldAlert,
-        dot: "bg-rose-500",
-        border: "border-rose-500/30",
-        bg: "bg-rose-500/8",
-        text: "text-rose-400",
-        badge: "bg-rose-500/15 text-rose-400 border-rose-500/30",
+        dot: "bg-destructive",
+        border: "border-destructive/30",
+        bg: "bg-destructive/10",
+        text: "text-destructive",
+        badge: "bg-destructive/15 text-destructive border-destructive/30",
         label: "CRITICAL",
     },
     warning: {
         icon: AlertTriangle,
-        dot: "bg-amber-400",
-        border: "border-amber-400/30",
-        bg: "bg-amber-400/8",
-        text: "text-amber-400",
-        badge: "bg-amber-400/15 text-amber-400 border-amber-400/30",
+        dot: "bg-warning",
+        border: "border-warning/30",
+        bg: "bg-warning/10",
+        text: "text-warning",
+        badge: "bg-warning/15 text-warning border-warning/30",
         label: "WARNING",
     },
     success: {
         icon: CheckCircle,
-        dot: "bg-emerald-400",
-        border: "border-emerald-500/30",
-        bg: "bg-emerald-500/8",
-        text: "text-emerald-400",
-        badge: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+        dot: "bg-success",
+        border: "border-success/30",
+        bg: "bg-success/10",
+        text: "text-success",
+        badge: "bg-success/15 text-success border-success/30",
         label: "SUCCESS",
     },
     info: {
         icon: Info,
-        dot: "bg-indigo-400",
-        border: "border-indigo-500/30",
-        bg: "bg-indigo-500/8",
-        text: "text-indigo-400",
-        badge: "bg-indigo-500/15 text-indigo-400 border-indigo-500/30",
+        dot: "bg-primary",
+        border: "border-primary/30",
+        bg: "bg-primary/10",
+        text: "text-primary",
+        badge: "bg-primary/15 text-primary border-primary/30",
         label: "INFO",
     },
 } as const
@@ -112,8 +112,8 @@ export function AlertsInbox() {
                 onClick={() => setOpen((o) => !o)}
                 title="Alerts Inbox"
                 className={`relative flex h-8 w-8 items-center justify-center rounded-md transition-all duration-200 ${open
-                    ? "bg-rose-500/15 text-rose-300 border border-rose-500/30"
-                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                        ? "bg-destructive/15 text-destructive border border-destructive/30"
+                        : "text-muted-foreground hover:bg-secondary hover:text-foreground"
                     }`}
             >
                 {unreadCount > 0 ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4 opacity-50" />}
@@ -127,21 +127,15 @@ export function AlertsInbox() {
             {/* Dropdown panel */}
             {open && (
                 <div
-                    className="absolute right-0 top-10 z-50 flex flex-col overflow-hidden rounded-xl border border-zinc-800/80 shadow-2xl"
-                    style={{
-                        width: "380px",
-                        maxHeight: "520px",
-                        background: "rgba(10,12,22,0.97)",
-                        backdropFilter: "blur(20px)",
-                    }}
+                    className="absolute right-0 top-10 z-50 flex w-[380px] max-h-[520px] flex-col overflow-hidden rounded-xl border border-border bg-card/95 backdrop-blur-xl shadow-2xl"
                 >
                     {/* Header */}
-                    <div className="flex shrink-0 items-center justify-between border-b border-zinc-800/60 px-4 py-3">
+                    <div className="flex shrink-0 items-center justify-between border-b border-border bg-muted/30 px-4 py-3">
                         <div className="flex items-center gap-2">
-                            <Bell className="h-3.5 w-3.5 text-zinc-400" />
-                            <span className="font-mono text-xs font-semibold text-zinc-300">Alerts Inbox</span>
+                            <Bell className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span className="font-mono text-[10px] font-black uppercase tracking-widest text-foreground">Alerts Inbox</span>
                             {unreadCount > 0 && (
-                                <span className="rounded-full border border-rose-500/30 bg-rose-500/15 px-1.5 py-0.5 font-mono text-[9px] font-bold text-rose-400">
+                                <span className="rounded-full border border-destructive/30 bg-destructive/15 px-1.5 py-0.5 font-mono text-[9px] font-bold text-destructive">
                                     {unreadCount} new
                                 </span>
                             )}
@@ -178,14 +172,14 @@ export function AlertsInbox() {
                     <div className="flex-1 overflow-y-auto">
                         {alerts.length === 0 ? (
                             <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
-                                <BellOff className="h-8 w-8 text-zinc-700" />
-                                <p className="font-mono text-xs text-zinc-600">No alerts yet</p>
-                                <p className="font-mono text-[10px] text-zinc-700">
+                                <BellOff className="h-8 w-8 text-muted-foreground/30" />
+                                <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/60">No alerts yet</p>
+                                <p className="max-w-[200px] font-mono text-[9px] leading-relaxed text-muted-foreground/40">
                                     Guardian and Librarian will push alerts here during scans
                                 </p>
                             </div>
                         ) : (
-                            <div className="divide-y divide-zinc-800/40">
+                            <div className="divide-y divide-border/40">
                                 {alerts.map((alert) => {
                                     const cfg = SEVERITY_CONFIG[alert.severity] ?? SEVERITY_CONFIG.info
                                     const Icon = cfg.icon
@@ -208,17 +202,17 @@ export function AlertsInbox() {
 
                                                 <div className="min-w-0 flex-1">
                                                     <div className="flex items-center gap-2">
-                                                        <p className="truncate font-mono text-[11px] font-semibold text-zinc-200">
+                                                        <p className="truncate font-mono text-[11px] font-bold text-foreground">
                                                             {alert.title}
                                                         </p>
-                                                        <span className={`shrink-0 rounded border px-1 py-0.5 font-mono text-[8px] font-bold uppercase ${cfg.badge}`}>
+                                                        <span className={`shrink-0 rounded border px-1 py-0.5 font-mono text-[8px] font-black uppercase ${cfg.badge}`}>
                                                             {cfg.label}
                                                         </span>
                                                     </div>
-                                                    <p className="mt-0.5 font-mono text-[10px] leading-relaxed text-zinc-500">
+                                                    <p className="mt-0.5 font-mono text-[10px] leading-relaxed text-muted-foreground/70">
                                                         {alert.message}
                                                     </p>
-                                                    <p className="mt-1 font-mono text-[9px] text-zinc-700">
+                                                    <p className="mt-1 font-mono text-[8px] text-muted-foreground/30">
                                                         {alert.timestamp}
                                                     </p>
                                                 </div>
@@ -232,8 +226,8 @@ export function AlertsInbox() {
 
                     {/* Footer */}
                     {alerts.length > 0 && (
-                        <div className="shrink-0 border-t border-zinc-800/60 px-4 py-2 text-center">
-                            <p className="font-mono text-[10px] text-zinc-700">
+                        <div className="shrink-0 border-t border-border/60 px-4 py-2 text-center">
+                            <p className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground/40">
                                 Click an alert to mark as read · Auto-refreshes every 5s
                             </p>
                         </div>

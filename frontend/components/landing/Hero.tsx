@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, LayoutGrid, Zap } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { getAllRepos } from "@/lib/repo-store";
 
 interface HeroProps {
     scrollProgress: number;
@@ -12,11 +14,13 @@ export const Hero = ({ scrollProgress }: HeroProps) => {
     const router = useRouter();
     const [isVisible, setIsVisible] = useState(false);
     const [hoveredButton, setHoveredButton] = useState<string | null>(null);
+    const [hasRepos, setHasRepos] = useState(false);
 
     useEffect(() => {
         const timer = setTimeout(() => {
             setIsVisible(true);
         }, 300);
+        setHasRepos(getAllRepos().length > 0);
 
         return () => clearTimeout(timer);
     }, []);
@@ -26,41 +30,30 @@ export const Hero = ({ scrollProgress }: HeroProps) => {
 
     return (
         <section
-            className="relative min-h-screen flex flex-col items-center justify-center px-6 overflow-hidden"
+            className="relative min-h-screen flex flex-col items-center justify-center px-6 overflow-hidden z-10"
             style={{
                 opacity: heroOpacity,
                 transform: heroTransform,
-                zIndex: 2,
             }}
         >
-            <div className="max-w-5xl mx-auto text-center">
+            <div className="max-w-5xl mx-auto text-center space-y-8">
                 {/* Title — KA-CHOW */}
                 <div
-                    className={`transition-all duration-1000 ease-out ${isVisible
+                    className={`transition-all duration-1000 ease-out space-y-4 ${isVisible
                         ? "opacity-100 scale-100 blur-0"
                         : "opacity-0 scale-85 blur-md"
                         }`}
-                    style={{
-                        transitionTimingFunction: "cubic-bezier(0.16, 1, 0.3, 1)",
-                    }}
                 >
-                    <div className="relative mb-4">
-                        <h1
-                            className="text-7xl md:text-9xl font-bold text-transparent bg-clip-text tracking-tight leading-tight"
-                            style={{
-                                backgroundImage: "linear-gradient(to right, var(--foreground), var(--foreground), var(--primary))",
-                                WebkitBackgroundClip: "text",
-                            }}
-                        >
-                            KA-CHOW
-                        </h1>
-                        <div
-                            className="absolute inset-0 blur-3xl -z-10"
-                            style={{
-                                background: "linear-gradient(to right, rgba(88,166,255,0.2), transparent, rgba(88,166,255,0.2))",
-                            }}
-                        />
+                    <div className="flex justify-center">
+                        <span className="badge">
+                            <Zap className="mr-1 h-3 w-3 text-primary" />
+                            v1.0.0 Alpha
+                        </span>
                     </div>
+                    
+                    <h1 className="text-6xl md:text-8xl tracking-tighter">
+                        KA-CHOW
+                    </h1>
                 </div>
 
                 {/* Subtitle */}
@@ -69,18 +62,9 @@ export const Hero = ({ scrollProgress }: HeroProps) => {
                         ? "opacity-100 scale-100 blur-0"
                         : "opacity-0 scale-85 blur-md"
                         }`}
-                    style={{
-                        transitionTimingFunction: "cubic-bezier(0.16, 1, 0.3, 1)",
-                        transitionDelay: "200ms",
-                    }}
+                    style={{ transitionDelay: "200ms" }}
                 >
-                    <h2
-                        className="text-3xl md:text-5xl font-semibold bg-clip-text  mb-3 font-sans"
-                        style={{
-                            backgroundImage: "linear-gradient(to right, var(--foreground), var(--muted-foreground))",
-                            WebkitBackgroundClip: "text",
-                        }}
-                    >
+                    <h2 className="text-2xl md:text-4xl text-muted-foreground font-normal">
                         The Autonomous Engineering Brain
                     </h2>
                 </div>
@@ -91,108 +75,65 @@ export const Hero = ({ scrollProgress }: HeroProps) => {
                         ? "opacity-100 scale-100 blur-0"
                         : "opacity-0 scale-85 blur-md"
                         }`}
-                    style={{
-                        transitionTimingFunction: "cubic-bezier(0.16, 1, 0.3, 1)",
-                        transitionDelay: "400ms",
-                    }}
+                    style={{ transitionDelay: "400ms" }}
                 >
-                    <p
-                        className="text-lg md:text-xl bg-clip-text mb-12"
-                        style={{
-                            backgroundImage: "linear-gradient(to right, var(--muted-foreground), #6b7280)",
-                            WebkitBackgroundClip: "text",
-                        }}
-                    >
-                        Understand your system like a Staff Engineer
+                    <p className="text-lg text-muted-foreground/80 max-w-2xl mx-auto">
+                        Understand your system like a Staff Engineer. Intelligent repository analysis and collaboration powered by AI.
                     </p>
                 </div>
 
                 {/* CTA Buttons */}
                 <div
-                    className={`transition-all duration-1000 ease-out ${isVisible
+                    className={`transition-all duration-1000 ease-out flex flex-col md:flex-row gap-4 justify-center ${isVisible
                         ? "opacity-100 scale-100 blur-0"
                         : "opacity-0 scale-85 blur-md"
                         }`}
-                    style={{
-                        transitionTimingFunction: "cubic-bezier(0.16, 1, 0.3, 1)",
-                        transitionDelay: "600ms",
-                    }}
+                    style={{ transitionDelay: "600ms" }}
                 >
-                    <div className="flex flex-col md:flex-row gap-4 justify-center">
-                        {/* Primary — Get Started */}
-                        <button
-                            onClick={() => router.push("/import-repository")}
-                            onMouseEnter={() => setHoveredButton("primary")}
-                            onMouseLeave={() => setHoveredButton(null)}
-                            className="group relative px-8 py-4 text-white rounded-xl font-semibold text-lg
-                         transition-all duration-300 ease-out
-                         hover:scale-105 active:scale-95
-                         inline-flex items-center gap-2 overflow-hidden"
-                            style={{
-                                background: "linear-gradient(135deg, var(--primary), #1f6feb)",
-                                border: "1px solid rgba(88,166,255,0.5)",
-                                boxShadow: hoveredButton === "primary"
-                                    ? "0 0 40px rgba(88,166,255,0.5)"
-                                    : "none",
-                            }}
+                    {hasRepos ? (
+                        <><Button
+                            size="lg"
+                            onClick={() => router.push("/repositories")}
+                            className="h-12 px-8 text-md font-semibold"
                         >
-                            <div
-                                className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                                style={{
-                                    background: "linear-gradient(to right, transparent, rgba(255,255,255,0.1), transparent)",
-                                    animation: hoveredButton === "primary" ? "shimmer 2s infinite" : "none",
-                                }}
-                            />
-                            <span className="relative">Get Started</span>
-                            <ArrowRight
-                                className="w-5 h-5 relative transition-all duration-300 group-hover:translate-x-2 group-hover:scale-110"
-                            />
-                        </button>
-
-                        {/* Secondary — Learn More */}
-                        <button
+                            <LayoutGrid className="mr-2 h-5 w-5" />
+                            Your Repositories
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="lg"
+                            onClick={() => router.push("/import-repository")}
+                            className="h-12 px-8 text-md"
+                        >
+                            Import New Repo
+                            <ArrowRight className="ml-2 h-5 w-5" />
+                        </Button></>
+                    ) : (
+                        <><Button
+                            size="lg"
+                            onClick={() => router.push("/import-repository")}
+                            className="h-12 px-8 text-md font-semibold"
+                        >
+                            Get Started
+                            <ArrowRight className="ml-2 h-5 w-5" />
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="lg"
+                            className="h-12 px-8 text-md"
                             onClick={() => {
                                 const el = document.getElementById("features-section");
                                 el?.scrollIntoView({ behavior: "smooth" });
                             }}
-                            onMouseEnter={() => setHoveredButton("secondary")}
-                            onMouseLeave={() => setHoveredButton(null)}
-                            className="group relative px-8 py-4 bg-transparent text-white rounded-xl font-semibold text-lg
-                         transition-all duration-300 ease-out
-                         hover:scale-105 active:scale-95
-                         inline-flex items-center gap-2"
-                            style={{
-                                border: hoveredButton === "secondary"
-                                    ? "1px solid var(--primary)"
-                                    : "1px solid var(--border)",
-                                boxShadow: hoveredButton === "secondary"
-                                    ? "0 0 20px rgba(88,166,255,0.2)"
-                                    : "none",
-                            }}
                         >
-                            <span className="relative">Learn More</span>
-                            <svg
-                                className="w-5 h-5 relative transition-all duration-300 group-hover:rotate-45"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                            >
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                            </svg>
-                        </button>
-                    </div>
+                            Learn More
+                        </Button></>
+                    )}
                 </div>
             </div>
 
-            {/* Radial glow background */}
-            <div
-                className="absolute inset-0 pointer-events-none"
-                style={{
-                    background:
-                        "radial-gradient(circle at 50% 50%, rgba(63, 185, 80, 0.08) 0%, transparent 70%)",
-                    zIndex: -1,
-                }}
-            />
+            {/* Radial glow background - Standardized opacity */}
+            <div className="absolute inset-0 pointer-events-none -z-10 opacity-20 bg-[radial-gradient(circle_at_50%_50%,rgba(88,166,255,0.1),transparent_70%)]" />
 
             <style>{`
         @keyframes shimmer {

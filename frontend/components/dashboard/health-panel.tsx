@@ -1,10 +1,10 @@
 "use client"
 
 import { useState, useEffect, useMemo, useCallback } from "react"
-import { X, Activity, AlertCircle, CheckCircle, AlertTriangle, Bug, Zap, ShieldCheck, Percent, Loader2, GitCommit, Copy, Flame } from "lucide-react"
+import { X, Activity, AlertCircle, CheckCircle, AlertTriangle, Bug, Zap, ShieldCheck, Percent, Loader2, GitCommit, Copy, Flame, RefreshCcw, GitPullRequest } from "lucide-react"
 import { healthMetrics as demoMetrics, errorLogs as demoLogs, type HealthMetric } from "@/lib/demo-data"
 import { useGraphData } from "@/hooks/use-graph-data"
-import { getHistory, type CommitInfo } from "@/lib/api"
+import { getHistory, syncGithub, type CommitInfo, type GithubSyncResult } from "@/lib/api"
 
 const statusConfig = {
   healthy: { color: "text-success", bg: "bg-success/10", icon: CheckCircle, label: "Healthy" },
@@ -36,17 +36,50 @@ export function HealthPanel({ onClose }: { onClose: () => void }) {
   const { nodes, graphMeta, isLive } = useGraphData()
   const [history, setHistory] = useState<CommitInfo[]>([])
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [syncResult, setSyncResult] = useState<GithubSyncResult | null>(null)
 
-  // Fetch history when a live repo is active
-  const fetchHistory = useCallback(() => {
-    if (isLive && graphMeta?.repo_url) {
-      setIsLoadingHistory(true)
-      getHistory(graphMeta.repo_url)
-        .then(setHistory)
-        .catch((err) => console.error("Failed to fetch history:", err))
-        .finally(() => setIsLoadingHistory(false))
+  // Auto-sync on mount (gets latest commits + PRs from GitHub API)
+  // Falls back to getHistory (local git log) for non-GitHub repos
+  const fetchHistory = useCallback(async () => {
+    if (!isLive || !graphMeta?.repo_url) return
+    setIsLoadingHistory(true)
+    try {
+      if (graphMeta.repo_url.startsWith("http")) {
+        // Live GitHub repo: sync from GitHub API for up-to-date history
+        const result = await syncGithub(graphMeta.repo_url)
+        setSyncResult(result)
+        setHistory(result.commits)
+      } else {
+        // Local path: fall back to local git log
+        const commits = await getHistory(graphMeta.repo_url)
+        setHistory(commits)
+      }
+    } catch (err) {
+      console.error("Failed to fetch history:", err)
+      // Last-ditch fallback: local log
+      try {
+        const commits = await getHistory(graphMeta.repo_url)
+        setHistory(commits)
+      } catch { /* silent */ }
+    } finally {
+      setIsLoadingHistory(false)
     }
   }, [isLive, graphMeta?.repo_url])
+
+  const handleSyncGithub = async () => {
+    if (!isLive || !graphMeta?.repo_url) return
+    setIsSyncing(true)
+    try {
+      const result = await syncGithub(graphMeta.repo_url)
+      setSyncResult(result)
+      setHistory(result.commits)
+    } catch (err) {
+      console.error("Failed to sync GitHub history:", err)
+    } finally {
+      setIsSyncing(false)
+    }
+  }
 
   useEffect(() => {
     fetchHistory()
@@ -211,10 +244,26 @@ export function HealthPanel({ onClose }: { onClose: () => void }) {
 
         {/* Recent Activity (History) */}
         <div>
-          <h3 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-            <GitCommit className="h-3 w-3" />
-            {isLive ? "Recent Commit History" : "Recent Activity Logs"}
-          </h3>
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <GitCommit className="h-3 w-3" />
+              {isLive ? "Recent Commit History" : "Recent Activity Logs"}
+            </h3>
+            {isLive && graphMeta?.repo_url && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleSyncGithub()
+                }}
+                disabled={isSyncing}
+                className="flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[9px] border border-blue-500/30 bg-blue-500/10 text-blue-400 transition-all hover:bg-blue-500/20 disabled:opacity-50"
+                title="Sync latest Commits and Pull Requests from GitHub"
+              >
+                <RefreshCcw className={`h-2.5 w-2.5 ${isSyncing ? "animate-spin" : ""}`} />
+                {isSyncing ? "Syncing..." : "Sync GitHub"}
+              </button>
+            )}
+          </div>
 
           <div className="flex flex-col gap-2">
             {isLoadingHistory ? (
@@ -250,6 +299,36 @@ export function HealthPanel({ onClose }: { onClose: () => void }) {
               </div>
             )}
           </div>
+
+          {/* Synced Pull Requests Section */}
+          {syncResult && syncResult.pull_requests?.length > 0 && (
+            <div className="mt-4 animate-in fade-in slide-in-from-top-2">
+              <h3 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <GitPullRequest className="h-3 w-3" />
+                Recent Pull Requests
+              </h3>
+              <div className="flex flex-col gap-2">
+                {syncResult.pull_requests.slice(0, 5).map((pr) => (
+                  <a
+                    key={pr.id}
+                    href={pr.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex flex-col gap-0.5 rounded-md border border-border bg-secondary/10 p-2 hover:border-blue-500/40 transition-colors"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-[9px] text-blue-400">#{pr.number}</span>
+                      <span className={`text-[8px] font-bold uppercase px-1 py-0.5 rounded ${pr.state === 'open' ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
+                        {pr.state}
+                      </span>
+                    </div>
+                    <p className="text-[11px] font-medium text-foreground/90 line-clamp-1">{pr.title}</p>
+                    <span className="text-[9px] text-muted-foreground">by {pr.author}</span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

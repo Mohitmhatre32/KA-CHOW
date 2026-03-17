@@ -43,20 +43,19 @@ export const Footer = () => {
     ];
 
     return (
-        <footer className="relative" style={{ background: "var(--background)", borderTop: "1px solid var(--border)" }}>
-            <div className="max-w-7xl mx-auto px-6 py-16">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-12 mb-12">
-                    {/* Brand */}
-                    <div className="lg:col-span-1">
-                        <div className="mb-6">
-                            <h3 className="text-2xl font-bold mb-2" style={{ color: "var(--foreground)" }}>
-                                DevInsight AI
-                            </h3>
-                            <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-                                Engineering intelligence platform
-                            </p>
+        <footer className="relative bg-background border-t border-border mt-20 py-16 px-6 overflow-hidden">
+            <div className="max-w-7xl mx-auto relative z-10">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-16">
+                    {/* Brand Column */}
+                    <div className="md:col-span-2 space-y-6">
+                        <div className="flex items-center gap-3">
+                            <h2 className="text-2xl font-semibold text-foreground m-0">
+                                KA-CHOW
+                            </h2>
                         </div>
-
+                        <p className="text-muted-foreground max-w-sm leading-relaxed">
+                            The autonomous engineering brain that understands your entire codebase architecture like a Staff Engineer.
+                        </p>
                         <div className="flex gap-4">
                             {socialLinks.map((social) => {
                                 const Icon = social.icon;
@@ -64,18 +63,10 @@ export const Footer = () => {
                                     <a
                                         key={social.label}
                                         href={social.href}
-                                        className="group relative w-10 h-10 rounded-lg flex items-center justify-center
-                             transition-all duration-300"
-                                        style={{
-                                            background: "var(--card)",
-                                            border: "1px solid var(--border)",
-                                        }}
+                                        className="group relative w-10 h-10 rounded-lg flex items-center justify-center border border-border bg-card hover:border-primary/50 transition-all duration-300"
                                         aria-label={social.label}
                                     >
-                                        <Icon
-                                            className="w-5 h-5 transition-colors duration-300"
-                                            style={{ color: "var(--muted-foreground)" }}
-                                        />
+                                        <Icon className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
                                     </a>
                                 );
                             })}
@@ -85,7 +76,7 @@ export const Footer = () => {
                     {/* Link columns */}
                     {footerLinks.map((section) => (
                         <div key={section.title}>
-                            <h4 className="font-semibold mb-4" style={{ color: "var(--foreground)" }}>
+                            <h4 className="font-semibold mb-4 text-foreground">
                                 {section.title}
                             </h4>
                             <ul className="space-y-3">
@@ -93,8 +84,7 @@ export const Footer = () => {
                                     <li key={link.label}>
                                         <a
                                             href={link.href}
-                                            className="text-sm hover:translate-x-1 inline-block transition-all duration-300"
-                                            style={{ color: "var(--muted-foreground)" }}
+                                            className="text-sm text-muted-foreground hover:text-primary hover:translate-x-1 inline-block transition-all duration-300"
                                         >
                                             {link.label}
                                         </a>
@@ -106,20 +96,20 @@ export const Footer = () => {
                 </div>
 
                 {/* Bottom bar */}
-                <div style={{ borderTop: "1px solid var(--border)" }} className="pt-8">
+                <div className="pt-8 border-t border-border">
                     <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-                        <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-                            Copyright {currentYear} DevInsight AI. All rights reserved.
+                        <p className="text-sm text-muted-foreground">
+                            Copyright {currentYear} KA-CHOW. All rights reserved.
                         </p>
 
                         <div className="flex gap-6">
-                            <a href="#privacy" className="text-sm transition-colors duration-300" style={{ color: "var(--muted-foreground)" }}>
+                            <a href="#privacy" className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-300">
                                 Privacy Policy
                             </a>
-                            <a href="#terms" className="text-sm transition-colors duration-300" style={{ color: "var(--muted-foreground)" }}>
+                            <a href="#terms" className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-300">
                                 Terms of Service
                             </a>
-                            <a href="#status" className="text-sm transition-colors duration-300" style={{ color: "var(--muted-foreground)" }}>
+                            <a href="#status" className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-300">
                                 Status
                             </a>
                         </div>

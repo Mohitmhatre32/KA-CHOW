@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import {
     Compass,
     FileJson,
@@ -20,13 +20,21 @@ import {
     XCircle,
     CheckCircle,
     Loader2,
+    Monitor,
 } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Separator } from "@/components/ui/separator"
 import {
     scaffoldProject,
     architectAnalyzeImpact,
     getFileContent,
+    syncJiraTicket,
+    createJiraTasks,
+    getAppTasks,
     type ScaffoldResponse,
     type ImpactResult,
+    type AppTask,
 } from "@/lib/api"
 import { getActiveRepo } from "@/lib/repo-store"
 
@@ -49,14 +57,7 @@ const DEFAULT_JIRA_JSON = JSON.stringify(
     2
 )
 
-// Impact Analyzer demo
-const DEMO_ENDPOINTS = [
-    "/api/v1/getUser",
-    "/api/v1/createOrder",
-    "/api/v1/billing/charge",
-    "/api/v1/notifications/send",
-    "/api/v1/auth/login",
-]
+
 
 // Architecture drift demo data
 const PLANNED_SERVICES = [
@@ -78,12 +79,12 @@ const ACTUAL_SERVICES = [
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
-function GlowPulse({ color = "cyan" }: { color?: "cyan" | "rose" | "amber" | "emerald" }) {
+function GlowPulse({ color = "primary" }: { color?: "primary" | "destructive" | "warning" | "success" }) {
     const colorMap = {
-        cyan: "bg-cyan-500",
-        rose: "bg-rose-500",
-        amber: "bg-amber-500",
-        emerald: "bg-emerald-500",
+        primary: "bg-primary",
+        destructive: "bg-destructive",
+        warning: "bg-warning",
+        success: "bg-success",
     }
     return (
         <span className="relative flex h-2 w-2">
@@ -154,7 +155,7 @@ function FileTreeNode({ node, depth = 0, onSelect }: { node: TreeNode; depth?: n
     return (
         <div>
             <button
-                className="flex w-full items-center gap-1.5 rounded px-1.5 py-[3px] transition-colors hover:bg-white/[0.04]"
+                className="flex w-full items-center gap-1.5 rounded px-1.5 py-[3px] transition-colors hover:bg-muted/30"
                 style={{ paddingLeft: `${depth * 16 + 6}px` }}
                 onClick={() => {
                     if (isFolder) setExpanded(!expanded)
@@ -163,19 +164,19 @@ function FileTreeNode({ node, depth = 0, onSelect }: { node: TreeNode; depth?: n
             >
                 {isFolder ? (
                     expanded ? (
-                        <ChevronDown className="h-3 w-3 text-zinc-500" />
+                        <ChevronDown className="h-3 w-3 text-muted-foreground" />
                     ) : (
-                        <ChevronRight className="h-3 w-3 text-zinc-500" />
+                        <ChevronRight className="h-3 w-3 text-muted-foreground" />
                     )
                 ) : (
                     <span className="w-3" />
                 )}
                 {isFolder ? (
-                    <Folder className="h-3.5 w-3.5 text-cyan-500/70" />
+                    <Folder className="h-3.5 w-3.5 text-primary/70" />
                 ) : (
                     <File className={`h-3.5 w-3.5 ${nameColor}`} />
                 )}
-                <span className={`font-mono text-[11.5px] ${nameColor}`}>{node.name}</span>
+                <span className={`font-mono text-[11px] font-medium leading-none ${nameColor}`}>{node.name}</span>
             </button>
             {isFolder && expanded && node.children?.map((child, i) => (
                 <FileTreeNode key={i} node={child} depth={depth + 1} onSelect={onSelect} />
@@ -202,14 +203,14 @@ function JsonHighlight({ json }: { json: string }) {
 
 function DriftServiceCard({ name, status }: { name: string; status: "planned" | "match" | "drift" }) {
     const styles = {
-        planned: "border-zinc-800 bg-zinc-900/50 text-zinc-500",
-        match: "border-emerald-500/20 bg-emerald-500/5 text-emerald-400",
-        drift: "border-amber-500/30 bg-amber-500/8 text-amber-400",
+        planned: "border-border bg-card/50 text-muted-foreground opacity-60",
+        match: "border-success/30 bg-success/5 text-success",
+        drift: "border-warning/30 bg-warning/5 text-warning",
     }
     const icons = {
-        planned: <Box className="h-3.5 w-3.5 text-zinc-600" />,
-        match: <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />,
-        drift: <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />,
+        planned: <Box className="h-3.5 w-3.5 text-muted-foreground/60" />,
+        match: <CheckCircle className="h-3.5 w-3.5 text-success" />,
+        drift: <AlertTriangle className="h-3.5 w-3.5 text-warning" />,
     }
     const labels = {
         planned: "Blueprint",
@@ -220,10 +221,10 @@ function DriftServiceCard({ name, status }: { name: string; status: "planned" | 
     return (
         <div className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 ${styles[status]}`}>
             {icons[status]}
-            <span className="flex-1 font-mono text-xs">{name}</span>
-            <span className={`rounded-full px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${status === "drift" ? "bg-amber-500/15 text-amber-400" : status === "match" ? "bg-emerald-500/10 text-emerald-500/70" : "bg-zinc-800 text-zinc-600"}`}>
+            <span className="flex-1 font-mono text-[10px] font-bold uppercase tracking-tight">{name}</span>
+            <Badge variant="outline" className={`h-4.5 px-1.5 font-mono text-[8px] uppercase tracking-wider ${status === "drift" ? "border-warning/40 bg-warning/10 text-warning" : status === "match" ? "border-success/40 bg-success/10 text-success" : "border-border bg-muted/20 text-muted-foreground"}`}>
                 {labels[status]}
-            </span>
+            </Badge>
         </div>
     )
 }
@@ -243,12 +244,80 @@ export function ArchitectView() {
     const [isContentLoading, setIsContentLoading] = useState(false)
 
     // ── Impact analyzer state ──
-    const [targetEndpoint, setTargetEndpoint] = useState(DEMO_ENDPOINTS[0])
-    const [proposedChange, setProposedChange] = useState("Change User ID from Integer to String")
+    const [targetFile, setTargetFile] = useState("")
+    const [proposedChange, setProposedChange] = useState("")
     const [impactLoading, setImpactLoading] = useState(false)
     const [impactResult, setImpactResult] = useState<ImpactResult | null>(null)
+    const [exportingTasks, setExportingTasks] = useState(false)
 
     const [error, setError] = useState<string | null>(null)
+
+    // ── Jira Sync ──
+    const [jiraKeyInput, setJiraKeyInput] = useState("")
+    const [isSyncingJira, setIsSyncingJira] = useState(false)
+    const [jiraSuccess, setJiraSuccess] = useState<string | null>(null)
+
+    const [appTasks, setAppTasks] = useState<AppTask[]>([])
+    const [ticketSource, setTicketSource] = useState<"app" | "jira">("app")
+    const activeRepo = getActiveRepo()
+
+    // Fetch local tasks created from mobile app on load
+    useEffect(() => {
+        if (activeRepo?.repo_name) {
+            setIsSyncingJira(true)
+            getAppTasks(activeRepo.repo_name)
+                .then(setAppTasks)
+                .catch(console.error)
+                .finally(() => setIsSyncingJira(false))
+        }
+    }, [activeRepo?.repo_name])
+
+    const handleJiraSync = useCallback(async () => {
+        if (!jiraKeyInput.trim()) {
+            setError("Please enter a Jira ticket key to sync.")
+            return
+        }
+        setIsSyncingJira(true)
+        setError(null)
+        setJiraSuccess(null)
+        try {
+            const ticketData = await syncJiraTicket(jiraKeyInput.trim())
+            
+            // Format for scaffolding prompt
+            const formatted = JSON.stringify({
+                ticket: ticketData.key,
+                summary: ticketData.summary,
+                status: ticketData.status,
+                description: ticketData.description
+            }, null, 2)
+
+            setJiraInput(formatted)
+            setJiraSuccess(`Synced ${ticketData.key}: ${ticketData.summary}`)
+        } catch (e: unknown) {
+            setError(e instanceof Error ? e.message : "Jira sync failed")
+        } finally {
+            setIsSyncingJira(false)
+        }
+    }, [jiraKeyInput])
+
+    // ── Create Tasks ──
+    const handleCreateJiraTasks = useCallback(async () => {
+        if (!jiraKeyInput.trim() || !impactResult) return
+        
+        setExportingTasks(true)
+        setError(null)
+        setJiraSuccess(null)
+        
+        try {
+            const tasks = impactResult.impacted_files.map(s => `Fix/Verify impact in ${s.file_path} [Reason: ${s.reason}]`)
+            const res = await createJiraTasks(jiraKeyInput.trim(), tasks)
+            setJiraSuccess(res.message)
+        } catch (e: unknown) {
+            setError(e instanceof Error ? e.message : "Task creation failed")
+        } finally {
+            setExportingTasks(false)
+        }
+    }, [jiraKeyInput, impactResult])
 
     // ── Scaffold handler ──
     const handleScaffold = useCallback(async () => {
@@ -279,7 +348,7 @@ export function ArchitectView() {
         setError(null)
         try {
             const result = await architectAnalyzeImpact({
-                target_endpoint: targetEndpoint,
+                target_endpoint: targetFile || "root", 
                 proposed_change: proposedChange,
                 repo_url: activeRepo.repo_url,
             })
@@ -289,7 +358,7 @@ export function ArchitectView() {
         } finally {
             setImpactLoading(false)
         }
-    }, [targetEndpoint, proposedChange])
+    }, [proposedChange])
 
     // ── File select handler ──
     const handleFileSelect = useCallback(async (node: TreeNode) => {
@@ -309,10 +378,7 @@ export function ArchitectView() {
     const fileTree = scaffoldResult ? buildTree(scaffoldResult.files, scaffoldResult.project_path) : []
 
     return (
-        <div
-            className="h-full overflow-y-auto"
-            style={{ background: "linear-gradient(135deg, #060a14 0%, #0a0f1e 50%, #080c18 100%)" }}
-        >
+        <div className="h-full overflow-y-auto bg-background/50">
             <div className="mx-auto max-w-7xl space-y-6 p-6">
 
                 {/* ══════════════════════════════════════════════════════════════
@@ -321,28 +387,21 @@ export function ArchitectView() {
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="flex items-start gap-4">
                         <div
-                            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-cyan-500/30"
-                            style={{
-                                background: "radial-gradient(circle at center, rgba(6,182,212,0.15), rgba(6,182,212,0.03))",
-                                boxShadow: "0 0 30px rgba(6,182,212,0.12)",
-                            }}
+                            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-primary/30 bg-primary/5"
                         >
-                            <Compass className="h-7 w-7 text-cyan-400" />
+                            <Compass className="h-7 w-7 text-primary" />
                         </div>
                         <div>
                             <div className="flex items-center gap-2">
-                                <h1 className="text-2xl font-bold tracking-tight text-zinc-100" style={{ fontFamily: "Inter, sans-serif" }}>
+                                <h1 className="text-2xl font-bold tracking-tight text-foreground">
                                     The Architect
                                 </h1>
-                                <span
-                                    className="rounded-full border border-cyan-500/40 px-2.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-widest text-cyan-400"
-                                    style={{ background: "rgba(6,182,212,0.08)" }}
-                                >
+                                <Badge variant="outline" className="border-primary/40 bg-primary/5 font-mono text-[10px] font-semibold uppercase tracking-widest text-primary">
                                     Design &amp; Impact
-                                </span>
-                                <GlowPulse color="cyan" />
+                                </Badge>
+                                <GlowPulse color="primary" />
                             </div>
-                            <p className="mt-0.5 font-mono text-xs text-zinc-500">
+                            <p className="mt-0.5 font-mono text-xs text-muted-foreground opacity-70">
                                 Translating Jira Requirements into Scaffolding &amp; Preventing Architectural Disasters
                             </p>
                         </div>
@@ -363,6 +422,119 @@ export function ArchitectView() {
                             </span>
                         </div>
 
+                        <div className="flex flex-col gap-2 mb-2 rounded-xl border border-zinc-800/80 bg-zinc-950/50 p-3">
+                            <div className="flex items-center justify-between">
+                                <label className="font-mono text-[10px] uppercase tracking-wider text-zinc-600">
+                                    Ticket Source
+                                </label>
+                                <div className="flex gap-4">
+                                    <label className="flex items-center gap-1.5 cursor-pointer font-mono text-[10px] text-zinc-400">
+                                        <input 
+                                            type="radio" 
+                                            name="ticketSource" 
+                                            value="app" 
+                                            checked={ticketSource === "app"}
+                                            onChange={() => {
+                                                setTicketSource("app")
+                                                setJiraKeyInput("")
+                                                setJiraSuccess(null)
+                                            }}
+                                            className="accent-primary"
+                                        />
+                                        Local App
+                                    </label>
+                                    <label className="flex items-center gap-1.5 cursor-pointer font-mono text-[10px] text-zinc-400">
+                                        <input 
+                                            type="radio" 
+                                            name="ticketSource" 
+                                            value="jira" 
+                                            checked={ticketSource === "jira"}
+                                            onChange={() => {
+                                                setTicketSource("jira")
+                                                setJiraKeyInput("")
+                                                setJiraSuccess(null)
+                                            }}
+                                            className="accent-primary"
+                                        />
+                                        Jira Cloud
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            {ticketSource === "app" ? (
+                                <div className="flex gap-2 mt-1">
+                                    <select
+                                        value={jiraKeyInput}
+                                        onChange={(e) => {
+                                            const val = e.target.value
+                                            setJiraKeyInput(val)
+                                            const task = appTasks.find(t => t.id === val)
+                                            if (task) {
+                                                const formatted = JSON.stringify({
+                                                    ticket: task.id,
+                                                    summary: task.title,
+                                                    status: task.status,
+                                                    linked_files: task.linked_nodes
+                                                }, null, 2)
+                                                setJiraInput(formatted)
+                                                setJiraSuccess(`Selected ${task.id}: ${task.title}`)
+                                            }
+                                        }}
+                                        className="flex-1 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-1.5 font-mono text-xs text-zinc-300 outline-none focus:border-cyan-500/40"
+                                    >
+                                        <option value="">-- Select a Ticket --</option>
+                                        {appTasks.map(t => (
+                                            <option key={t.id} value={t.id}>
+                                                {t.id} - {t.title}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <Button
+                                        onClick={() => {
+                                            if (activeRepo?.repo_name) {
+                                                setIsSyncingJira(true)
+                                                getAppTasks(activeRepo.repo_name)
+                                                    .then(setAppTasks)
+                                                    .catch(console.error)
+                                                    .finally(() => setIsSyncingJira(false))
+                                            }
+                                        }}
+                                        disabled={isSyncingJira || !activeRepo}
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-8 gap-2 border-primary/30 text-primary hover:bg-primary/10"
+                                    >
+                                        {isSyncingJira ? <RefreshCw className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                                        Refresh
+                                    </Button>
+                                </div>
+                            ) : (
+                                <div className="flex gap-2 mt-1">
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. TICKET-123"
+                                        value={jiraKeyInput}
+                                        onChange={(e) => setJiraKeyInput(e.target.value)}
+                                        className="flex-1 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-1.5 font-mono text-xs text-zinc-300 outline-none placeholder:text-zinc-600 focus:border-cyan-500/40"
+                                    />
+                                    <Button
+                                        onClick={handleJiraSync}
+                                        disabled={isSyncingJira || !jiraKeyInput.trim()}
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-8 gap-2 border-primary/30 text-primary hover:bg-primary/10"
+                                    >
+                                        {isSyncingJira ? <RefreshCw className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                                        Sync
+                                    </Button>
+                                </div>
+                            )}
+                            
+                            {jiraSuccess && (
+                                <p className="font-mono text-[10px] text-emerald-400 mt-1">{jiraSuccess}</p>
+                            )}
+                        </div>
+
                         <div
                             className="flex flex-1 flex-col overflow-hidden rounded-xl border border-zinc-800/80"
                             style={{ background: "rgba(8,10,18,0.95)", minHeight: "320px" }}
@@ -370,7 +542,7 @@ export function ArchitectView() {
                             {/* Editor header */}
                             <div className="flex items-center gap-2 border-b border-zinc-800/60 px-4 py-2.5">
                                 <FileJson className="h-3.5 w-3.5 text-amber-400" />
-                                <span className="font-mono text-xs font-semibold text-amber-300">ticket_DEV-202.json</span>
+                                <span className="font-mono text-xs font-semibold text-amber-300">architect_requirements.json</span>
                                 <span className="ml-auto rounded-full border border-zinc-800 bg-zinc-900 px-2 py-0.5 font-mono text-[10px] text-zinc-600">
                                     EDITABLE
                                 </span>
@@ -388,17 +560,12 @@ export function ArchitectView() {
                         </div>
 
                         {/* Scaffold button */}
-                        <button
+                        <Button
                             onClick={handleScaffold}
                             disabled={scaffoldLoading}
-                            className={`flex items-center justify-center gap-2.5 rounded-xl border px-5 py-3 font-mono text-sm font-semibold transition-all duration-300 ${scaffoldLoading
-                                ? "cursor-not-allowed border-cyan-500/20 bg-cyan-950/30 text-cyan-500/50"
-                                : "border-cyan-500/40 text-cyan-300 hover:border-cyan-400/60 hover:text-cyan-200"
-                                }`}
-                            style={!scaffoldLoading ? {
-                                background: "radial-gradient(ellipse at center, rgba(6,182,212,0.12), rgba(8,10,18,0.9))",
-                                boxShadow: "0 0 20px rgba(6,182,212,0.15), 0 0 60px rgba(6,182,212,0.05)",
-                            } : undefined}
+                            size="lg"
+                            className={`w-full gap-2.5 font-mono text-sm font-bold border-primary/40 text-primary hover:bg-primary/10 transition-all duration-300 ${scaffoldLoading ? "opacity-50" : ""}`}
+                            variant="outline"
                         >
                             {scaffoldLoading ? (
                                 <RefreshCw className="h-4 w-4 animate-spin" />
@@ -406,7 +573,7 @@ export function ArchitectView() {
                                 <Sparkles className="h-4 w-4" />
                             )}
                             {scaffoldLoading ? "Generating Blueprint…" : "Generate Blueprint & Scaffold"}
-                        </button>
+                        </Button>
                     </div>
 
                     {/* ── RIGHT: Generated Scaffolding ── */}
@@ -430,16 +597,18 @@ export function ArchitectView() {
                             {selectedFile ? (
                                 <>
                                     {/* Code Viewer Header */}
-                                    <div className="flex items-center gap-2 border-b border-cyan-500/20 bg-cyan-950/20 px-4 py-2.5">
-                                        <File className="h-3.5 w-3.5 text-cyan-400" />
-                                        <span className="font-mono text-xs font-semibold text-cyan-300 truncate">{selectedFile.name}</span>
-                                        <button
+                                    <div className="flex items-center gap-2 border-b border-primary/20 bg-primary/5 px-4 py-2.5">
+                                        <File className="h-3.5 w-3.5 text-primary" />
+                                        <span className="font-mono text-xs font-bold text-primary truncate uppercase tracking-tighter">{selectedFile.name}</span>
+                                        <Button
                                             onClick={() => setSelectedFile(null)}
-                                            className="ml-auto flex items-center gap-1 rounded border border-zinc-700 bg-zinc-800 px-2 py-0.5 font-mono text-[10px] text-zinc-400 hover:text-white"
+                                            variant="ghost"
+                                            size="sm"
+                                            className="ml-auto h-7 gap-1 font-mono text-[10px] text-muted-foreground hover:text-foreground"
                                         >
                                             <ChevronRight className="h-3 w-3 rotate-180" />
                                             BACK
-                                        </button>
+                                        </Button>
                                     </div>
                                     <div className="flex-1 overflow-auto p-4">
                                         {isContentLoading ? (
@@ -456,12 +625,12 @@ export function ArchitectView() {
                             ) : scaffoldResult ? (
                                 <>
                                     {/* File tree header */}
-                                    <div className="flex items-center gap-2 border-b border-emerald-500/20 bg-emerald-950/20 px-4 py-2.5">
-                                        <FolderTree className="h-3.5 w-3.5 text-emerald-400" />
-                                        <span className="font-mono text-xs font-semibold text-emerald-300">Project Structure</span>
-                                        <span className="ml-auto rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-mono text-[10px] text-emerald-400">
+                                    <div className="flex items-center gap-2 border-b border-success/20 bg-success/5 px-4 py-2.5">
+                                        <FolderTree className="h-3.5 w-3.5 text-success" />
+                                        <span className="font-mono text-xs font-bold text-success uppercase tracking-widest">Project Structure</span>
+                                        <Badge variant="outline" className="ml-auto border-success/30 bg-success/10 font-mono text-[9px] text-success">
                                             GENERATED
-                                        </span>
+                                        </Badge>
                                     </div>
 
                                     {/* File tree */}
@@ -483,15 +652,15 @@ export function ArchitectView() {
                                     )}
                                 </>
                             ) : scaffoldLoading ? (
-                                <div className="flex h-full items-center justify-center">
+                                <div className="flex h-full items-center justify-center bg-primary/5">
                                     <div className="flex flex-col items-center gap-4">
-                                        <Compass className="h-10 w-10 animate-pulse text-cyan-400" />
-                                        <p className="font-mono text-xs text-zinc-500">Architect AI is designing the blueprint…</p>
+                                        <Compass className="h-10 w-10 animate-pulse text-primary" />
+                                        <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Architect AI is designing the blueprint…</p>
                                         <div className="flex gap-1">
                                             {[0, 1, 2, 3].map((i) => (
                                                 <div
                                                     key={i}
-                                                    className="h-1 w-6 animate-pulse rounded-full bg-cyan-500/30"
+                                                    className="h-1 w-6 animate-pulse rounded-full bg-primary/30"
                                                     style={{ animationDelay: `${i * 0.15}s` }}
                                                 />
                                             ))}
@@ -500,14 +669,11 @@ export function ArchitectView() {
                                 </div>
                             ) : (
                                 <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-                                    <div
-                                        className="flex h-14 w-14 items-center justify-center rounded-2xl border border-cyan-500/20"
-                                        style={{ background: "rgba(6,182,212,0.05)" }}
-                                    >
-                                        <FolderTree className="h-6 w-6 text-cyan-500/40" />
+                                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-primary/20 bg-primary/5">
+                                        <FolderTree className="h-6 w-6 text-primary/40" />
                                     </div>
-                                    <p className="font-mono text-xs text-zinc-600">
-                                        Click <span className="text-cyan-500">&quot;Generate Blueprint &amp; Scaffold&quot;</span> to produce the project structure.
+                                    <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground leading-relaxed">
+                                        Click <span className="text-primary font-bold">&quot;Generate Blueprint &amp; Scaffold&quot;</span> to produce the project structure.
                                     </p>
                                 </div>
                             )}
@@ -537,49 +703,79 @@ export function ArchitectView() {
                     </div>
 
                     <div
-                        className="rounded-xl border border-zinc-800/80 p-5"
-                        style={{ background: "rgba(10,13,23,0.8)" }}
+                        className="rounded-xl border border-border p-5 bg-card/30 backdrop-blur-sm"
                     >
+                        {/* ── What-If Analyzer Explainer ── */}
+                        <div className="mb-5 rounded-xl border border-primary/20 bg-primary/5 p-4">
+                            <div className="flex items-start gap-3">
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-primary/30 bg-primary/10">
+                                    <Monitor className="h-4 w-4 text-primary" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <p className="font-mono text-xs font-bold uppercase tracking-wider text-primary">
+                                            What is the What-If Analyzer?
+                                        </p>
+                                        <span className="rounded-full border border-rose-500/30 bg-rose-500/8 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-widest text-rose-400">
+                                            Blast Radius Engine
+                                        </span>
+                                    </div>
+                                    <p className="font-mono text-[11px] leading-relaxed text-muted-foreground">
+                                        The <span className="text-primary font-semibold">What-If Analyzer</span> is an AI-powered dependency intelligence tool. When you describe a proposed code change, it crawls the project&apos;s live knowledge graph to identify every file, service, or module that will be affected — giving each a <span className="text-rose-400 font-semibold">HIGH</span> / <span className="text-amber-400 font-semibold">MEDIUM</span> / <span className="text-emerald-400 font-semibold">LOW</span> blast-radius severity score.
+                                    </p>
+                                    <div className="mt-3 grid grid-cols-3 gap-2">
+                                        {[
+                                            { step: "01", label: "Crawls Graph", desc: "Scans all import / dependency edges" },
+                                            { step: "02", label: "Traces Impact", desc: "Finds all files that import the target" },
+                                            { step: "03", label: "AI Reasoning", desc: "LLM assigns severity + explanation" },
+                                        ].map(({ step, label, desc }) => (
+                                            <div key={step} className="rounded-lg border border-border bg-card/60 p-2.5">
+                                                <p className="font-mono text-[9px] font-bold text-primary/50 mb-0.5">STEP {step}</p>
+                                                <p className="font-mono text-[10px] font-bold text-foreground">{label}</p>
+                                                <p className="font-mono text-[9px] text-muted-foreground opacity-70 leading-snug">{desc}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         {/* Controls row */}
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                            {/* Target Endpoint */}
-                            <div className="flex-1">
+                            {/* Target File/Endpoint */}
+                            <div className="flex-[0.4]">
                                 <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-wider text-zinc-600">
-                                    Target Endpoint / File
+                                    Target File / Endpoint (Optional)
                                 </label>
-                                <select
-                                    value={targetEndpoint}
-                                    onChange={(e) => setTargetEndpoint(e.target.value)}
-                                    className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5 font-mono text-xs text-cyan-300 outline-none transition-colors focus:border-cyan-500/40"
-                                >
-                                    {DEMO_ENDPOINTS.map((ep) => (
-                                        <option key={ep} value={ep}>{ep}</option>
-                                    ))}
-                                </select>
+                                <input
+                                    type="text"
+                                    value={targetFile}
+                                    onChange={(e) => setTargetFile(e.target.value)}
+                                    className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5 font-mono text-xs text-zinc-300 outline-none transition-colors focus:border-cyan-500/40"
+                                    placeholder="e.g. app/main.py"
+                                />
                             </div>
 
-                            {/* Proposed Change */}
+                            {/* Proposed Change Scenario */}
                             <div className="flex-1">
                                 <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-wider text-zinc-600">
-                                    Proposed Change
+                                    What if scenario
                                 </label>
                                 <input
                                     type="text"
                                     value={proposedChange}
                                     onChange={(e) => setProposedChange(e.target.value)}
                                     className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5 font-mono text-xs text-zinc-300 outline-none transition-colors focus:border-cyan-500/40"
-                                    placeholder="e.g. Change User ID from Integer to String"
+                                    placeholder="e.g. What if I change the datatype from int to string?"
                                 />
                             </div>
 
                             {/* Analyze button */}
-                            <button
+                            <Button
                                 onClick={handleAnalyzeImpact}
-                                disabled={impactLoading}
-                                className={`flex shrink-0 items-center gap-2 rounded-lg border px-4 py-2.5 font-mono text-xs font-semibold transition-all ${impactLoading
-                                    ? "cursor-not-allowed border-zinc-800 bg-zinc-900 text-zinc-600"
-                                    : "border-rose-500/30 bg-rose-500/8 text-rose-300 hover:border-rose-400/50 hover:bg-rose-500/15"
-                                    }`}
+                                disabled={impactLoading || !proposedChange.trim()}
+                                className={`h-10 gap-2 font-mono text-xs font-bold transition-all ${impactLoading || !proposedChange.trim() ? "opacity-50" : "border-destructive/40 bg-destructive/5 text-destructive hover:bg-destructive/10"}`}
+                                variant="outline"
                             >
                                 {impactLoading ? (
                                     <RefreshCw className="h-3.5 w-3.5 animate-spin" />
@@ -587,55 +783,96 @@ export function ArchitectView() {
                                     <Activity className="h-3.5 w-3.5" />
                                 )}
                                 Analyze Blast Radius
-                            </button>
+                            </Button>
                         </div>
 
                         {/* Results */}
                         {impactResult && (
                             <div className="mt-5 space-y-4">
                                 {/* High impact banner */}
-                                <div
-                                    className="flex items-start gap-3 rounded-xl border border-rose-500/30 px-5 py-4"
-                                    style={{
-                                        background: "radial-gradient(ellipse at top left, rgba(239,68,68,0.08), rgba(10,13,23,0.95))",
-                                        boxShadow: "0 0 40px rgba(239,68,68,0.06) inset",
-                                    }}
-                                >
-                                    <ShieldAlert className="mt-0.5 h-6 w-6 shrink-0 text-rose-500" />
-                                    <div className="flex-1">
-                                        <p className="font-mono text-base font-bold text-rose-300">
-                                            ⚠ High Impact Detected
-                                        </p>
-                                        <p className="mt-1 font-mono text-xs text-zinc-400">
-                                            {impactResult.summary}
-                                        </p>
-                                    </div>
-                                    <span
-                                        className="shrink-0 rounded-full border border-rose-500/40 px-2.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-widest text-rose-400"
-                                        style={{ background: "rgba(239,68,68,0.1)" }}
+                                {impactResult.severity === "high" && impactResult.total_impacted > 0 ? (
+                                    <div
+                                        className="flex items-start gap-4 rounded-xl border border-rose-500/30 bg-rose-500/5 px-5 py-4 backdrop-blur-md shadow-[inset_0_0_40px_rgba(244,63,94,0.05)]"
                                     >
-                                        {impactResult.severity}
-                                    </span>
-                                </div>
-
-                                {/* Blast radius list */}
-                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                                    {impactResult.affected_services.map((svc, i) => (
-                                        <div
-                                            key={i}
-                                            className="rounded-lg border border-rose-500/15 p-3"
-                                            style={{ background: "rgba(239,68,68,0.03)" }}
-                                        >
-                                            <div className="flex items-center gap-2">
-                                                <XCircle className="h-3.5 w-3.5 text-rose-500" />
-                                                <span className="font-mono text-xs font-semibold text-rose-300">{svc.name}</span>
-                                            </div>
-                                            <p className="mt-1.5 font-mono text-[10px] leading-relaxed text-zinc-500">
-                                                {svc.reason}
+                                        <ShieldAlert className="mt-0.5 h-6 w-6 shrink-0 text-rose-500" />
+                                        <div className="flex-1">
+                                            <p className="font-mono text-base font-bold uppercase tracking-tight text-rose-500">
+                                                ⚠ High Impact Detected
+                                            </p>
+                                            <p className="mt-1 font-mono text-[11px] leading-relaxed text-muted-foreground opacity-80">
+                                                {impactResult.total_impacted} files affected at depth {impactResult.blast_radius_depth}
                                             </p>
                                         </div>
-                                    ))}
+                                        <Badge variant="outline" className="shrink-0 border-rose-500/40 bg-rose-500/10 font-mono text-[10px] font-bold uppercase tracking-widest text-rose-500">
+                                            {impactResult.severity}
+                                        </Badge>
+                                    </div>
+                                ) : (
+                                    <div
+                                        className="flex items-start gap-4 rounded-xl border border-zinc-700/30 bg-zinc-800/10 px-5 py-4 backdrop-blur-md"
+                                    >
+                                        <Activity className="mt-0.5 h-6 w-6 shrink-0 text-zinc-400" />
+                                        <div className="flex-1">
+                                            <p className="font-mono text-base font-bold uppercase tracking-tight text-zinc-300">
+                                                Analysis Complete
+                                            </p>
+                                            <p className="mt-1 font-mono text-[11px] leading-relaxed text-muted-foreground opacity-80">
+                                                {impactResult.total_impacted} components analyzed with {impactResult.severity} impact risk.
+                                            </p>
+                                        </div>
+                                        <Badge variant="outline" className={`shrink-0 font-mono text-[10px] font-bold uppercase tracking-widest ${impactResult.severity === "medium" ? "border-amber-500/40 bg-amber-500/10 text-amber-500" : "border-zinc-700 bg-zinc-800 text-zinc-500"}`}>
+                                            {impactResult.severity}
+                                        </Badge>
+                                    </div>
+                                )}
+
+                                {/* Scenario Explanation */}
+                                {impactResult.scenario_explanation && (
+                                    <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+                                        <div className="flex items-start gap-3">
+                                            <Sparkles className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                                            <div>
+                                                <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-primary mb-1">Architectural Insight</p>
+                                                <p className="font-mono text-[11px] leading-relaxed text-muted-foreground whitespace-pre-wrap">
+                                                    {impactResult.scenario_explanation}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Blast radius list */}
+                                <div className="mt-4">
+                                    <p className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest mb-3">IMPACTED FILES</p>
+                                    <div className="flex flex-col gap-3">
+                                        {impactResult.impacted_files.map((svc, i) => (
+                                            <div
+                                                key={i}
+                                                className="rounded-lg border border-zinc-800/80 bg-[#161b22] p-4 shadow-sm"
+                                            >
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <span className="font-mono text-sm font-semibold tracking-tight text-zinc-200">{svc.file_path}</span>
+                                                    <span className={`font-mono text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-sm ${svc.severity === "high" ? "text-rose-500 bg-rose-500/10" : svc.severity === "medium" ? "text-amber-500 bg-amber-500/10" : "text-emerald-500 bg-emerald-500/10"}`}>
+                                                        {svc.severity}
+                                                    </span>
+                                                </div>
+                                                <p className="font-sans text-[13px] leading-relaxed text-zinc-400">
+                                                    {svc.reason}
+                                                </p>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
+
+                                {/* Export to Jira */}
+                                <Button
+                                    onClick={handleCreateJiraTasks}
+                                    disabled={exportingTasks || !jiraKeyInput.trim() || impactResult.impacted_files.length === 0}
+                                    className="w-full mt-4 bg-[#0052cc] text-white hover:bg-[#0052cc]/90 gap-2 font-mono text-xs font-bold transition-all"
+                                >
+                                    {exportingTasks ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <span>➕</span>}
+                                    {jiraKeyInput.trim() ? "Export to Jira Sub-tasks" : "Enter a Jira ticket key above to export tasks"}
+                                </Button>
                             </div>
                         )}
 
@@ -663,10 +900,9 @@ export function ArchitectView() {
 
                         {/* ── Left: Planned vs Actual ── */}
                         <div
-                            className="rounded-xl border border-zinc-800/80 p-5"
-                            style={{ background: "rgba(10,13,23,0.8)" }}
+                            className="rounded-xl border border-border p-5 bg-card/30 backdrop-blur-sm"
                         >
-                            <p className="mb-4 font-mono text-xs font-semibold text-zinc-400">Planned Blueprint vs Current Implementation</p>
+                            <p className="mb-4 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground opacity-60">Planned Blueprint vs Current Implementation</p>
 
                             <div className="grid grid-cols-2 gap-4">
                                 {/* Planned */}
@@ -695,62 +931,51 @@ export function ArchitectView() {
                             </div>
 
                             {/* Drift callout */}
-                            <div className="mt-4 flex items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2.5">
-                                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
-                                <p className="font-mono text-[11px] text-amber-400">
-                                    <span className="font-bold">Architecture Drift Detected:</span> &quot;analytics-worker&quot; was not in the original blueprint.
+                            <div className="mt-4 flex items-center gap-2 rounded-lg border border-warning/25 bg-warning/5 px-3 py-2.5">
+                                <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
+                                <p className="font-mono text-[10px] font-bold uppercase tracking-tight text-warning leading-none">
+                                    Architecture Drift Detected: <span className="opacity-70 font-medium">&quot;analytics-worker&quot; was not in the original blueprint.</span>
                                 </p>
                             </div>
                         </div>
 
                         {/* ── Right: SonarQube Architecture Metrics ── */}
                         <div
-                            className="flex flex-col gap-4 rounded-xl border border-zinc-800/80 p-5"
-                            style={{ background: "rgba(10,13,23,0.8)" }}
+                            className="flex flex-col gap-4 rounded-xl border border-border p-5 bg-card/30 backdrop-blur-sm"
                         >
-                            <p className="font-mono text-xs font-semibold text-zinc-400">SonarQube Architectural Health</p>
+                            <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground opacity-60">SonarQube Architectural Health</p>
 
                             {/* Metric cards */}
                             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                                 {/* Code Smells */}
-                                <div
-                                    className="rounded-xl border border-amber-500/25 p-4"
-                                    style={{ background: "rgba(245,158,11,0.04)" }}
-                                >
-                                    <p className="mb-1 font-mono text-[10px] uppercase tracking-wider text-zinc-600">Structural Code Smells</p>
-                                    <p className="font-mono text-2xl font-bold text-amber-400">8</p>
-                                    <p className="mt-0.5 font-mono text-[10px] text-amber-500/60">Needs attention</p>
+                                <div className="rounded-xl border border-warning/25 bg-warning/5 p-4">
+                                    <p className="mb-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground opacity-60">Structural Code Smells</p>
+                                    <p className="font-mono text-2xl font-bold text-warning">8</p>
+                                    <p className="mt-0.5 font-mono text-[9px] uppercase tracking-tighter text-warning opacity-50">Needs attention</p>
                                 </div>
 
                                 {/* Duplication */}
-                                <div
-                                    className="rounded-xl border border-rose-500/25 p-4"
-                                    style={{ background: "rgba(239,68,68,0.04)" }}
-                                >
-                                    <p className="mb-1 font-mono text-[10px] uppercase tracking-wider text-zinc-600">Duplication Density</p>
-                                    <p className="font-mono text-2xl font-bold text-rose-400">14%</p>
-                                    <p className="mt-0.5 font-mono text-[10px] text-rose-500/60">Violates DRY Principle</p>
+                                <div className="rounded-xl border border-destructive/25 bg-destructive/5 p-4">
+                                    <p className="mb-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground opacity-60">Duplication Density</p>
+                                    <p className="font-mono text-2xl font-bold text-destructive">14%</p>
+                                    <p className="mt-0.5 font-mono text-[9px] uppercase tracking-tighter text-destructive opacity-50">Violates DRY Principle</p>
                                 </div>
                             </div>
 
                             {/* Gate status */}
                             <div className="mt-auto">
                                 <div
-                                    className="flex items-center gap-3 rounded-xl border border-rose-500/30 px-4 py-3"
-                                    style={{ background: "radial-gradient(ellipse at top left, rgba(239,68,68,0.08), rgba(10,13,23,0.95))" }}
+                                    className="flex items-center gap-4 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 backdrop-blur-md shadow-[inset_0_0_40px_rgba(var(--destructive),0.05)]"
                                 >
-                                    <XCircle className="h-6 w-6 text-rose-500" />
+                                    <XCircle className="h-6 w-6 text-destructive" />
                                     <div>
-                                        <p className="font-mono text-[10px] uppercase tracking-widest text-rose-500/70">SonarQube Clean Architecture Gate</p>
-                                        <p
-                                            className="font-mono text-lg font-black tracking-tight text-rose-400"
-                                            style={{ textShadow: "0 0 15px rgba(239,68,68,0.4)" }}
-                                        >
+                                        <p className="font-mono text-[9px] uppercase tracking-widest text-destructive/70">SonarQube Clean Architecture Gate</p>
+                                        <p className="font-mono text-lg font-black tracking-tight text-destructive">
                                             FAILED
                                         </p>
                                     </div>
                                     <div className="ml-auto">
-                                        <GlowPulse color="rose" />
+                                        <GlowPulse color="destructive" />
                                     </div>
                                 </div>
                             </div>

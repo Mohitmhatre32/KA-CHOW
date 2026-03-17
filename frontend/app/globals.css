@@ -1,50 +1,62 @@
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --background: #0d1117;
-  --foreground: #e6edf3;
-  --card: #161b22;
-  --card-foreground: #e6edf3;
-  --popover: #161b22;
-  --popover-foreground: #e6edf3;
-  --primary: #58a6ff;
-  --primary-foreground: #0d1117;
-  --secondary: #21262d;
+  /* GITHUB STYLE + REQUESTED #030303 BACKGROUND */
+  --background: #030303;           /* Requested pitch black */
+  --foreground: #c9d1d9;           /* GitHub default text */
+  --card: #0d1117;                 /* GitHub panel background */
+  --card-foreground: #c9d1d9;
+  --popover: #0d1117;
+  --popover-foreground: #c9d1d9;
+  --primary: #58a6ff;              /* GitHub blue accent */
+  --primary-foreground: #030303;
+  --secondary: #161b22;            /* GitHub lighter panel */
   --secondary-foreground: #c9d1d9;
-  --muted: #161b22;
-  --muted-foreground: #8b949e;
+  --muted: #21262d;                /* GitHub input/border background */
+  --muted-foreground: #8b949e;     /* GitHub gray text */
   --accent: #1f6feb;
-  --accent-foreground: #e6edf3;
-  --destructive: #f85149;
-  --destructive-foreground: #e6edf3;
-  --border: #30363d;
+  --accent-foreground: #ffffff;
+  --destructive: #da3633;          /* GitHub red */
+  --destructive-foreground: #ffffff;
+  --border: #30363d;               /* GitHub subtle border */
   --input: #21262d;
   --ring: #58a6ff;
+  
+  /* Metrics/Graphs Colors */
   --chart-1: #58a6ff;
-  --chart-2: #3fb950;
-  --chart-3: #d29922;
-  --chart-4: #f85149;
-  --chart-5: #bc8cff;
-  --radius: 0.5rem;
+  --chart-2: #2ea043;              /* GitHub Success Green */
+  --chart-3: #d29922;              /* GitHub Warning Orange */
+  --chart-4: #da3633;
+  --chart-5: #ab7df8;              /* Purple for AI features */
+  
+  --radius: 0.375rem;              /* 6px - GitHub standard corner radius */
+  
   --sidebar: #0d1117;
   --sidebar-foreground: #c9d1d9;
   --sidebar-primary: #58a6ff;
-  --sidebar-primary-foreground: #0d1117;
+  --sidebar-primary-foreground: #030303;
   --sidebar-accent: #161b22;
-  --sidebar-accent-foreground: #e6edf3;
-  --sidebar-border: #21262d;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #30363d;
   --sidebar-ring: #58a6ff;
-  --success: #3fb950;
+  
+  --success: #2ea043;
   --warning: #d29922;
 }
 
 @theme inline {
-  --font-sans: 'Montserrat', 'Inter', 'Geist', 'Geist Fallback', sans-serif;
-  --font-mono: 'JetBrains Mono', 'Geist Mono', 'Geist Mono Fallback', monospace;
+  /* FONT DEFINITIONS */
+  --font-sans: 'Google Sans', sans-serif;
+  --font-serif: 'Playfair Display', serif;
+  --font-heading: var(--font-serif);
+  --font-body: var(--font-sans);
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* COLOR MAPPING */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -64,40 +76,90 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
+  
   --color-success: var(--success);
   --color-warning: var(--warning);
+
+  /* BORDER RADIUS */
+  --radius-sm: calc(var(--radius) - 2px); /* 4px */
+  --radius-md: var(--radius);             /* 6px */
+  --radius-lg: calc(var(--radius) + 2px); /* 8px */
 }
 
+/* =========================================
+   TYPOGRAPHY HIERARCHY & GLOBAL STYLES
+   ========================================= */
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+  
   html {
     scroll-behavior: smooth;
   }
+  
+  /* Body (Default): Montserrat, 14px */
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-body);
+    font-size: 0.875rem; /* 14px */
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* H1 (Page/Panel Title): Sans-Serif, 20px, SemiBold */
+  h1 {
+    font-family: var(--font-heading);
+    font-style: normal;
+    font-size: 1.25rem; /* 20px */
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    @apply text-foreground mb-4;
+  }
+
+  /* H2 (Section Header): Sans-Serif, 16px, Medium */
+  h2 {
+    font-family: var(--font-heading);
+    font-style: normal;
+    font-size: 1rem; /* 16px */
+    font-weight: 500;
+    @apply text-foreground mb-3;
+  }
+
+  h3, h4, h5, h6 {
+    font-family: var(--font-heading);
+    font-style: italic;
+    @apply text-foreground mb-2;
+  }
+  
+  h3 { font-size: 0.875rem; font-weight: 500; }
+
+  /* Small (Metadata): Montserrat, 12px, Muted Color */
+  small {
+    font-family: var(--font-body);
+    font-size: 0.75rem; /* 12px */
+    @apply text-muted-foreground;
   }
 }
 
-/* Custom scrollbar for dark theme */
+/* =========================================
+   CUSTOM UTILITIES (MICRO BADGES)
+   ========================================= */
+@utility text-micro {
+  font-family: var(--font-mono);
+  font-size: 0.625rem; /* 10px */
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+@utility badge {
+  @apply inline-flex items-center justify-center px-2 py-0.5 rounded-sm text-micro bg-muted text-foreground border border-border;
+}
+
+/* =========================================
+   CUSTOM SCROLLBAR (DARK THEME)
+   ========================================= */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;

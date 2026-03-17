@@ -1,0 +1,1268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KA-CHOW · Librarian Validator</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+    :root {
+      --bg:        #0a0c10;
+      --surface:   #111318;
+      --card:      #161b22;
+      --border:    #21262d;
+      --accent:    #58a6ff;
+      --accent2:   #3fb950;
+      --accent3:   #d29922;
+      --danger:    #f85149;
+      --text:      #e6edf3;
+      --muted:     #7d8590;
+      --folder-c:  #d29922;
+      --file-c:    #58a6ff;
+      --edge-c:    rgba(88,166,255,.35);
+      --edge-dep:  rgba(63,185,80,.45);
+      --glow:      0 0 20px rgba(88,166,255,.15);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Top Bar ── */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 12px 20px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      z-index: 10;
+    }
+    .logo { font-size: 1.1rem; font-weight: 700; letter-spacing: -.5px; }
+    .logo span { color: var(--accent); }
+    .badge {
+      font-size: .65rem; font-weight: 600; letter-spacing: .5px;
+      padding: 2px 8px; border-radius: 99px;
+      background: rgba(88,166,255,.12); color: var(--accent);
+      border: 1px solid rgba(88,166,255,.3);
+    }
+    header input {
+      flex: 1; padding: 8px 14px;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text);
+      font-family: 'JetBrains Mono', monospace; font-size: .8rem;
+      outline: none; transition: border-color .2s;
+    }
+    header input:focus { border-color: var(--accent); box-shadow: var(--glow); }
+    header select {
+      padding: 8px 10px; background: var(--card);
+      border: 1px solid var(--border); border-radius: 8px;
+      color: var(--text); font-size: .8rem; outline: none;
+    }
+    .btn {
+      padding: 8px 18px; border-radius: 8px; border: none;
+      font-family: 'Inter', sans-serif; font-size: .82rem; font-weight: 600;
+      cursor: pointer; transition: all .2s; white-space: nowrap;
+    }
+    .btn-primary { background: var(--accent); color: #000; }
+    .btn-primary:hover { background: #79b8ff; transform: translateY(-1px); }
+    .btn-primary:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+    .btn-ghost {
+      background: transparent; color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ── Layout ── */
+    .layout {
+      display: grid;
+      grid-template-columns: 260px 1fr 300px;
+      grid-template-rows: 1fr 180px;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Panels ── */
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      overflow: hidden;
+      display: flex; flex-direction: column;
+    }
+    .panel-header {
+      padding: 10px 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      font-size: .72rem; font-weight: 600; letter-spacing: .8px;
+      color: var(--muted); text-transform: uppercase;
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .panel-body { flex: 1; overflow-y: auto; padding: 10px; }
+    .panel-body::-webkit-scrollbar { width: 4px; }
+    .panel-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* ── File Tree ── */
+    #file-tree { grid-row: 1 / 3; }
+    .tree-item {
+      display: flex; align-items: center; gap: 7px;
+      padding: 4px 8px; border-radius: 5px;
+      font-size: .78rem; cursor: pointer;
+      transition: background .15s;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .tree-item:hover { background: rgba(88,166,255,.08); }
+    .tree-item.active { background: rgba(88,166,255,.15); color: var(--accent); }
+    .tree-item .icon { flex-shrink: 0; font-size: .9rem; }
+    .tree-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* ── Graph Canvas ── */
+    #graph-panel {
+      grid-column: 2; grid-row: 1;
+      background: var(--bg);
+      position: relative;
+    }
+    #graph-svg { width: 100%; height: 100%; }
+    .node-circle { cursor: pointer; transition: r .15s; }
+    .link { stroke-width: 1; }
+    .node-label { font-family: 'JetBrains Mono', monospace; font-size: 9px; fill: var(--muted); pointer-events: none; }
+
+    /* Tooltip */
+    #tooltip {
+      position: fixed; pointer-events: none;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px 14px;
+      font-size: .78rem; max-width: 280px; display: none;
+      box-shadow: 0 8px 32px rgba(0,0,0,.6);
+      z-index: 100;
+    }
+
+    /* ── Guardian Dashboard Styles ── */
+    #guardian-dashboard {
+      display: none; position: absolute; top: 0; left: 260px; right: 0; bottom: 0;
+      background: #0d1117; z-index: 60; overflow-y: auto; padding: 32px 40px;
+      font-family: 'Inter', sans-serif;
+    }
+    .g-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
+    .g-shield-icon { width: 56px; height: 56px; border-radius: 12px; background: rgba(248,81,73,.08); border: 1px solid rgba(248,81,73,.25); display: flex; align-items: center; justify-content: center; font-size: 1.8rem; color: #f85149; box-shadow: 0 0 15px rgba(248,81,73,.1); }
+    .g-pill { font-size: .65rem; background: rgba(248,81,73,.15); color: #f85149; padding: 2px 8px; border-radius: 99px; letter-spacing: 1px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
+    .g-repo-bar { background: #161b22; border: 1px solid var(--border); border-radius: 12px; padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; font-family: 'JetBrains Mono', monospace; font-size: .75rem; color: var(--muted); }
+    
+    .g-section-title { font-size: .7rem; letter-spacing: 1.5px; color: var(--muted); margin-bottom: 12px; font-weight: 600; text-transform: uppercase; display: flex; align-items: center; gap: 8px; }
+    .g-box { background: rgba(248,81,73,.03); border: 1px solid rgba(248,81,73,.4); border-radius: 12px; padding: 20px; position: relative; }
+    .g-box-green { background: rgba(63,185,80,.03); border: 1px solid rgba(63,185,80,.4); }
+    
+    .g-stat-box { background: #161b22; border: 1px solid rgba(248,81,73,.3); border-radius: 12px; padding: 18px; flex: 1; position: relative; }
+    .g-stat-box.green { border-color: rgba(63,185,80,.3); }
+    .g-stat-title { color: var(--muted); font-size: .65rem; font-weight: 700; letter-spacing: 1px; margin-bottom: 8px; display: flex; justify-content: space-between; }
+    .g-stat-val { font-size: 2rem; font-weight: 700; line-height: 1; margin-bottom: 6px; }
+    .g-stat-val.red { color: #f85149; text-shadow: 0 0 10px rgba(248,81,73,.3); }
+    .g-stat-val.green { color: #3fb950; text-shadow: 0 0 10px rgba(63,185,80,.3); }
+    
+    .g-violation-item { color: var(--muted); font-size: .8rem; font-family: 'JetBrains Mono', monospace; line-height: 1.6; margin-bottom: 8px; display: flex; gap: 8px; }
+    .g-violation-item::before { content: '>'; color: #f85149; font-weight: bold; }
+
+    #tooltip {
+      position: fixed; pointer-events: none;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px 14px;
+      font-size: .78rem; max-width: 280px; display: none;
+      box-shadow: 0 8px 32px rgba(0,0,0,.6);
+      z-index: 100;
+    }
+    #tooltip strong { color: var(--accent); font-family: 'JetBrains Mono', monospace; font-size: .75rem; }
+
+    .graph-controls {
+      position: absolute; bottom: 14px; right: 14px;
+      display: flex; gap: 6px;
+    }
+
+    /* Empty state */
+    .empty-state {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      height: 100%; gap: 12px; color: var(--muted);
+    }
+    .empty-state .big-icon { font-size: 3rem; }
+    .empty-state p { font-size: .82rem; text-align: center; max-width: 260px; }
+
+    /* ── Stats Panel ── */
+    #stats-panel { grid-column: 3; grid-row: 1; }
+    .stat-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 9px 0; border-bottom: 1px solid var(--border);
+      font-size: .8rem;
+    }
+    .stat-row:last-child { border-bottom: none; }
+    .stat-label { color: var(--muted); }
+    .stat-value { font-weight: 600; font-family: 'JetBrains Mono', monospace; }
+    .stat-value.good { color: var(--accent2); }
+
+    .health-bar { background: var(--border); border-radius: 4px; height: 6px; margin: 8px 0 4px; overflow: hidden; }
+    .health-fill { height: 100%; border-radius: 4px; transition: width .6s ease; }
+
+    .tag-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .tag {
+      font-size: .68rem; padding: 2px 8px; border-radius: 99px;
+      background: rgba(88,166,255,.1); color: var(--accent);
+      border: 1px solid rgba(88,166,255,.2);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ── Bottom Panels ── */
+    #alerts-panel { grid-column: 1; grid-row: 2; }
+    #file-preview { grid-column: 2 / 4; grid-row: 2; }
+
+    .alert-item {
+      display: flex; gap: 10px; align-items: flex-start;
+      padding: 7px; border-radius: 6px; margin-bottom: 6px;
+      font-size: .75rem; background: var(--surface);
+      border: 1px solid var(--border);
+    }
+    .alert-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 3px; }
+    .alert-dot.info    { background: var(--accent); }
+    .alert-dot.success { background: var(--accent2); }
+    .alert-dot.warning { background: var(--accent3); }
+    .alert-dot.error   { background: var(--danger); }
+    .alert-title { font-weight: 600; margin-bottom: 2px; }
+    .alert-msg { color: var(--muted); line-height: 1.4; }
+
+    #file-preview .panel-body { padding: 0; overflow: hidden; display: flex; flex-direction: column; position: relative; }
+    #code-view {
+      width: 100%; height: 100%; flex: 1;
+      background: transparent;
+      color: var(--accent2);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .72rem;
+      padding: 12px;
+      overflow: auto;
+      white-space: pre;
+      line-height: 1.5;
+      display: block;
+      border: none;
+      outline: none;
+      resize: none;
+    }
+    #code-view::-webkit-scrollbar { width: 4px; height: 4px; }
+    #code-view::-webkit-scrollbar-thumb { background: var(--border); }
+
+    .spinner {
+      width: 18px; height: 18px; border-radius: 50%;
+      border: 2px solid rgba(88,166,255,.2);
+      border-top-color: var(--accent);
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .tabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .tab {
+      padding: 8px 16px; font-size: .75rem; cursor: pointer; color: var(--muted);
+      border-bottom: 2px solid transparent; transition: all .15s;
+    }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-content { display: none; flex: 1; overflow-y: auto; flex-direction: column; }
+    .tab-content.active { display: flex; }
+
+    .commit-item {
+      display: flex; gap: 10px; align-items: flex-start;
+      padding: 7px 0; border-bottom: 1px solid var(--border);
+      font-size: .74rem;
+    }
+    .commit-type {
+      font-size: .63rem; font-weight: 700; padding: 1px 6px;
+      border-radius: 4px; white-space: nowrap; margin-top: 2px;
+    }
+    .ct-feat   { background: rgba(63,185,80,.15);   color: var(--accent2); }
+    .ct-fix    { background: rgba(248,81,73,.15);    color: var(--danger); }
+    .ct-chore  { background: rgba(125,133,144,.15);  color: var(--muted); }
+    .ct-docs   { background: rgba(88,166,255,.15);   color: var(--accent); }
+    .ct-other  { background: rgba(210,153,34,.15);   color: var(--accent3); }
+    .commit-msg  { font-weight: 500; margin-bottom: 2px; }
+    .commit-meta { color: var(--muted); font-size: .68rem; }
+
+    .cache-badge {
+      font-size: .65rem; padding: 2px 8px; border-radius: 99px;
+      background: rgba(210,153,34,.12); color: var(--accent3);
+      border: 1px solid rgba(210,153,34,.3);
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">KA-<span>CHOW</span></div>
+  <div class="badge">LIBRARIAN v2</div>
+
+  <input id="repo-input" type="text"
+    placeholder="GitHub URL or local path…"
+    value="https://github.com/tiangolo/fastapi" />
+
+  <select id="branch-select">
+    <option value="main">main</option>
+    <option value="master">master</option>
+  </select>
+
+  <label style="display:flex;align-items:center;gap:6px;font-size:.78rem;color:var(--muted);cursor:pointer;">
+    <input type="checkbox" id="force-cb" style="accent-color:var(--accent);" />
+    Force rescan
+  </label>
+
+  <button class="btn btn-primary" id="load-btn" onclick="loadRepo()">⚡ Load</button>
+  <button class="btn btn-ghost" onclick="fetchAlerts()">🔔 Alerts</button>
+
+  <div id="status-wrap" style="display:none;align-items:center;gap:8px;">
+    <div class="spinner"></div>
+    <span style="font-size:.78rem;color:var(--muted);" id="status-text">Processing…</span>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- File Tree -->
+  <div class="panel" id="file-tree">
+    <div class="panel-header">
+      <span>📁 File Explorer</span>
+      <span id="file-count" style="color:var(--accent);font-family:'JetBrains Mono',monospace;"></span>
+    </div>
+    <div class="panel-body" id="tree-body">
+      <div class="empty-state">
+        <div class="big-icon">📦</div>
+        <p>Load a repository to explore its file structure</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Graph -->
+  <div class="panel" id="graph-panel">
+    <div class="panel-header">
+      <span>🕸️ Dependency Graph</span>
+      <span id="node-count" style="color:var(--muted);font-size:.7rem;"></span>
+    </div>
+    <div style="flex:1;position:relative;overflow:hidden;">
+      <div class="empty-state" id="graph-empty">
+        <div class="big-icon">🌐</div>
+        <p>The dependency graph will render here after loading a repo</p>
+      </div>
+      <svg id="graph-svg" style="display:none;"></svg>
+      <div class="graph-controls">
+        <button class="btn btn-ghost" style="font-size:.7rem;padding:5px 10px;" onclick="resetZoom()">⟳ Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats + Commits -->
+  <div class="panel" id="stats-panel">
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab(event,'stats')">📊 Stats</div>
+      <div class="tab" onclick="switchTab(event,'commits')">📜 Commits</div>
+      <div class="tab" onclick="switchTab(event,'architect')">🏗️ Architect</div>
+      <div class="tab" onclick="switchTab(event,'mentor')">🎓 Mentor</div>
+    </div>
+
+    <div class="tab-content active" id="tab-stats">
+      <div class="panel-body">
+        <div id="stats-empty" class="empty-state" style="height:auto;padding:40px 0;">
+          <div class="big-icon">📈</div><p>Stats appear after loading</p>
+        </div>
+        <div id="stats-content" style="display:none;">
+          <div class="stat-row"><span class="stat-label">Project</span><span class="stat-value" id="s-name">—</span></div>
+          <div class="stat-row"><span class="stat-label">Branch</span><span class="stat-value" id="s-branch">—</span></div>
+          <div class="stat-row"><span class="stat-label">Files</span><span class="stat-value good" id="s-files">—</span></div>
+          <div class="stat-row"><span class="stat-label">Graph Nodes</span><span class="stat-value" id="s-nodes">—</span></div>
+          <div class="stat-row"><span class="stat-label">Dep Edges</span><span class="stat-value" id="s-edges">—</span></div>
+          <div class="stat-row"><span class="stat-label">Chunks Embedded</span><span class="stat-value good" id="s-chunks">—</span></div>
+          <div class="stat-row"><span class="stat-label">Processed At</span><span class="stat-value" id="s-time" style="font-size:.68rem;">—</span></div>
+          <div class="stat-row"><span class="stat-label">Source</span><span id="s-cache"></span></div>
+          <div style="margin-top:12px;">
+            <div style="display:flex;justify-content:space-between;font-size:.72rem;">
+              <span style="color:var(--muted)">Docstring Coverage</span>
+              <span id="s-doc-pct" style="font-family:'JetBrains Mono',monospace;"></span>
+            </div>
+            <div class="health-bar"><div class="health-fill" id="s-doc-bar" style="width:0%"></div></div>
+          </div>
+          <div style="margin-top:12px;font-size:.72rem;color:var(--muted);margin-bottom:6px;">Languages</div>
+          <div class="tag-row" id="s-langs"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-content" id="tab-architect">
+      <div class="panel-body">
+        <h3 style="font-size:.85rem; margin-bottom:12px; color:var(--accent)">🏗️ Project Architect</h3>
+        
+        <!-- Jira Sync -->
+        <div style="background:rgba(88,166,255,.05); border:1px solid var(--border); border-radius:8px; padding:12px; margin-bottom:16px;">
+          <label style="font-size:.65rem; color:var(--muted); display:block; margin-bottom:6px;">JIRA INTEGRATION</label>
+          <div style="display:flex; gap:8px;">
+            <input id="jira-key" type="text" placeholder="TICKET-123" style="flex:1; font-size:.7rem; padding:6px; background:var(--card); border:1px solid var(--border); border-radius:4px; color:var(--text);">
+            <button class="btn btn-ghost" style="padding:4px 10px; font-size:.68rem;" onclick="syncJira()">Sync</button>
+          </div>
+          <div id="jira-info" style="margin-top:8px; font-size:.72rem; color:var(--accent2); display:none;"></div>
+        </div>
+
+        <!-- Scaffolding -->
+        <div style="margin-bottom:20px;">
+          <label style="font-size:.7rem; color:var(--muted); display:block; margin-bottom:6px;">SCAFFOLD NEW PROJECT</label>
+          <textarea id="build-reqs" placeholder="Describe your architecture requirements..." style="width:100%; height:80px; background:var(--card); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:.75rem; padding:10px; resize:none; margin-bottom:8px;"></textarea>
+          <button class="btn btn-primary" style="width:100%; font-size:.75rem;" onclick="runBuild()">🚀 Scaffold Structure</button>
+        </div>
+
+        <hr style="border:0; border-top:1px solid var(--border); margin:20px 0;">
+
+        <!-- Impact Analysis -->
+        <div>
+          <label style="font-size:.7rem; color:var(--muted); display:block; margin-bottom:6px;">BLAST RADIUS (IMPACT ANALYSIS)</label>
+          <div style="font-size:.7rem; color:var(--muted); margin-bottom:10px; border-left:2px solid var(--accent); padding-left:8px;">
+            Target: <span id="impact-target" style="color:var(--text)">None selected</span>
+          </div>
+          <textarea id="change-desc" placeholder="What is the proposed change?" style="width:100%; height:60px; background:var(--card); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:.75rem; padding:10px; resize:none; margin-bottom:8px;"></textarea>
+          <button class="btn btn-ghost" style="width:100%; font-size:.75rem; border-color:var(--accent3); color:var(--accent3);" onclick="runImpact()">🔍 Analyze Impact</button>
+        </div>
+
+        <!-- Impact Results -->
+        <div id="impact-results" style="margin-top:16px; display:none;">
+           <div style="font-size:.65rem; color:var(--muted); margin-bottom:8px; display:flex; justify-content:space-between;">
+             <span>IMPACTED FILES</span>
+             <span id="impact-count" style="color:var(--danger)">0</span>
+           </div>
+           <div id="impact-list"></div>
+           <button class="btn btn-primary" id="btn-jira-tasks" style="width:100%; margin-top:12px; font-size:.7rem; background:#0052cc; color:#fff;" onclick="createJiraTasks()" disabled>➕ Export to Jira Sub-tasks</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mentor Tab -->
+    <div class="tab-content" id="tab-mentor">
+      <div class="panel-body">
+        <h3 style="font-size:.85rem; margin-bottom:12px; color:var(--accent2)">🎓 Engineering Mentor</h3>
+      
+
+        <!-- Onboarding Progress -->
+        <div style="margin-bottom:20px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+            <label style="font-size:.7rem; color:var(--muted); font-weight:700;">ONBOARDING PATH</label>
+            <select id="mentor-role" onchange="loadOnboarding()" style="font-size:.65rem; padding:2px 6px; background:var(--card); border:1px solid var(--border); color:var(--text); border-radius:4px;">
+              <option value="Backend">Backend</option>
+              <option value="Frontend">Frontend</option>
+              <option value="SRE">SRE</option>
+            </select>
+          </div>
+          <div id="onboarding-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+        </div>
+
+        <hr style="border:0; border-top:1px solid var(--border); margin:20px 0;">
+
+        <!-- Mentor Chat -->
+        <div style="display:flex; flex-direction:column; height:300px;">
+          <label style="font-size:.7rem; color:var(--muted); font-weight:700; margin-bottom:10px;">ASK THE MENTOR</label>
+          <div id="mentor-chat-box" style="flex:1; overflow-y:auto; background:rgba(0,0,0,.2); border:1px solid var(--border); border-radius:8px; padding:10px; margin-bottom:10px; font-size:.75rem; line-height:1.5;">
+            <div style="color:var(--muted); text-align:center; margin-top:40px;">Ask me about the architecture, tech stack, or specific files.</div>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <input id="mentor-input" type="text" placeholder="Explain the auth flow..." style="flex:1; font-size:.75rem; padding:8px 12px; background:var(--card); border:1px solid var(--border); border-radius:8px; color:var(--text);" onkeyup="if(event.key==='Enter') askMentor()">
+            <button class="btn btn-primary" style="padding:8px 14px;" onclick="askMentor()">➤</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Alerts -->
+  <div class="panel" id="alerts-panel">
+    <div class="panel-header">
+      <span>🔔 Alerts</span>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <span id="unread-badge" style="display:none;color:var(--danger);font-size:.7rem;"></span>
+        <button onclick="clearAlerts()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.7rem;">Clear</button>
+      </div>
+    </div>
+    <div class="panel-body" id="alerts-body">
+      <div class="empty-state" style="height:100%;padding:0;">
+        <div class="big-icon" style="font-size:1.5rem;">💤</div><p>No alerts yet</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- File Preview -->
+  <div class="panel" id="file-preview">
+    <div class="panel-header" style="justify-content: flex-start; gap: 12px;">
+      <span>📄 File Preview</span>
+      <span id="preview-path" style="font-family:'JetBrains Mono',monospace;font-size:.68rem;color:var(--accent);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+      <button class="btn btn-ghost" id="btn-review" style="padding: 4px 8px; font-size: .65rem; display:none;" onclick="runReview()">🔍 Review</button>
+      <button class="btn btn-primary" id="btn-heal" style="padding: 4px 8px; font-size: .65rem; display:none; background: var(--accent2);" onclick="runHeal()">💊 Heal</button>
+      <button class="btn btn-primary" id="btn-save" style="padding: 4px 8px; font-size: .65rem; display:none;" onclick="saveFile()">💾 Save</button>
+    </div>
+    <div class="panel-body">
+      <div id="guardian-overlay" style="display:none; padding:10px; background:rgba(22,27,34,0.95); border-bottom:1px solid var(--border); font-size:.75rem; flex-shrink:0;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:4px;">
+           <strong id="guardian-status-mini"></strong>
+        </div>
+      </div>
+      <div class="empty-state" id="preview-empty">
+        <div class="big-icon">🖱️</div>
+        <p>Click any file node or tree item to preview its content</p>
+      </div>
+      <textarea id="code-view" spellcheck="false" style="display:none;"></textarea>
+    </div>
+  </div>
+
+</div> <!-- /layout -->
+
+<!-- Guardian Dashboard (Absolutely positioned over right-side panels) -->
+<div id="guardian-dashboard">
+  <!-- Header -->
+  <div class="g-header">
+    <div style="display:flex; gap: 18px; align-items:center;">
+       <div class="g-shield-icon" id="g-shield-icon">🛡️</div>
+       <div>
+         <h2 style="font-size: 1.4rem; font-weight: 700; margin-bottom:6px; display:flex; align-items:center; gap: 12px; color: #e6edf3;">
+           The Guardian 
+           <span class="g-pill" id="g-badge-pill">CI/CD ENFORCER <span style="display:inline-block; width:6px;height:6px;border-radius:50%;background:#f85149;box-shadow:0 0 6px #f85149;"></span></span>
+         </h2>
+         <p style="color: var(--muted); font-size: .8rem; font-family: 'JetBrains Mono', monospace;">Intercepting Webhooks & Enforcing Quality Gates</p>
+       </div>
+    </div>
+    <div style="display:flex; gap: 12px; align-items:center;">
+       <div style="background:var(--surface); border:1px solid var(--border); padding:6px 12px; border-radius:8px; font-size:.75rem; font-family:'JetBrains Mono', monospace; display:flex; align-items:center; gap:8px;">
+          <span style="color:var(--muted)">⑂ PR ·</span> <span id="g-pr-name" style="color:#e6edf3;">TargetFile</span>
+          <span class="g-pill" style="margin-left:8px;" id="g-pr-status">BLOCKED</span>
+       </div>
+       <button class="btn btn-ghost" onclick="document.getElementById('guardian-dashboard').style.display='none'">⟳ Close</button>
+       <button class="btn btn-primary" id="g-btn-heal" style="background:#f85149; color:#fff;" onclick="runHeal()">💊 Auto-Heal Code</button>
+    </div>
+  </div>
+  
+  <!-- Repo Bar -->
+  <div class="g-repo-bar">
+     <div style="display:flex; align-items:center; gap:12px;">
+       <span style="font-size:1.1rem; color:var(--accent);">📂</span> 
+       <span>Repo: <span id="g-repo-name" style="color:#e6edf3; font-weight:600;">--</span> <span style="color:var(--muted); margin:0 6px;">·</span> <span id="g-repo-total">-- files</span><br/>
+       <span style="color:var(--accent2); font-size:.68rem;">✓ Loaded: <span id="g-file-name">--</span></span></span>
+     </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+    <!-- LEFT COLUMN -->
+    <div>
+      <div class="g-section-title"><span style="color:var(--muted); font-family:monospace;">&lt;/&gt;</span> LLM QUALITY GATE</div>
+      
+      <!-- Overall Status -->
+      <div class="g-box" id="g-overall-box" style="margin-bottom: 16px; display:flex; justify-content:space-between; align-items:center; box-shadow: inset 0 0 20px rgba(248,81,73,.05);">
+         <div style="display:flex; align-items:center; gap: 16px;">
+            <div id="g-overall-icon" style="width: 36px; height: 36px; border-radius: 50%; background: #f85149; color: #000; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size: 1.2rem;">✕</div>
+            <div>
+              <div style="color: #f85149; font-size: .7rem; font-weight:700; letter-spacing:1px; margin-bottom:2px;" id="g-overall-subtitle">OVERALL STATUS</div>
+              <div id="g-overall-title" style="color: #f85149; font-size: 1.4rem; font-weight:600; font-family: 'JetBrains Mono', monospace; text-shadow: 0 0 10px rgba(248,81,73,.3);">QUALITY GATE: BLOCKED</div>
+            </div>
+         </div>
+         <div style="color:#f85149; font-size:.65rem; display:flex; align-items:center; gap:6px; font-weight:700;"><span style="width:6px;height:6px;border-radius:50%;background:#f85149;box-shadow:0 0 8px #f85149;"></span> LIVE</div>
+      </div>
+      
+      <!-- Metrics Row -->
+      <div style="display: flex; gap: 16px;">
+        <div class="g-stat-box" id="g-stat-issues" style="border-color: rgba(248,81,73,.4);">
+           <div class="g-stat-title">ISSUES FOUND <span style="color:#f85149; font-size:.8rem;">🐞</span></div>
+           <div class="g-stat-val red" id="g-issue-count">4</div>
+           <div style="color:var(--muted); font-size:.7rem;" id="g-issue-desc">Fix before merge</div>
+        </div>
+        <div class="g-stat-box green" id="g-stat-crit">
+           <div class="g-stat-title">CRITICAL ISSUES <span style="color:#3fb950; font-size:.8rem;">🛡️</span></div>
+           <div class="g-stat-val green" id="g-crit-count">0</div>
+           <div style="color:var(--muted); font-size:.7rem;">Security + Injection risks</div>
+        </div>
+        <div class="g-stat-box" id="g-stat-score">
+           <div class="g-stat-title">QUALITY SCORE <span style="color:#f85149; font-size:.8rem;">⚡</span></div>
+           <div class="g-stat-val red" id="g-score-val">20%</div>
+           <div style="color:var(--muted); font-size:.7rem;">Below threshold</div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- RIGHT COLUMN -->
+    <div>
+      <div class="g-section-title"><span style="color:var(--muted); border:1px solid var(--border); border-radius:50%; width:16px; height:16px; display:inline-flex; align-items:center; justify-content:center;">!</span> ENFORCEMENT ACTION</div>
+      
+      <div class="g-box" id="g-action-box" style="padding:24px; background:#161b22;">
+        <div style="display:flex; align-items:center; gap:14px; margin-bottom: 20px;">
+           <div id="g-action-icon" style="width: 36px; height: 36px; border-radius: 8px; background: rgba(248,81,73,.1); color: #f85149; border: 1px solid rgba(248,81,73,.4); display:flex; align-items:center; justify-content:center; font-weight:bold; font-size: 1.2rem;">✕</div>
+           <div>
+             <div id="g-action-title" style="color: #e6edf3; font-size: 1.2rem; font-weight:600; margin-bottom:2px;">Merge Blocked</div>
+             <div style="color: #f85149; font-size: .65rem; font-weight:700; letter-spacing:1px;" id="g-action-subtitle">GUARDIAN ENFORCING POLICY</div>
+           </div>
+        </div>
+        
+        <p id="g-action-desc" style="color:var(--muted); font-size:.85rem; line-height:1.6; margin-bottom:20px; font-family:'JetBrains Mono', monospace;">
+          This code violates the 'No Docs, No Merge' policy and contains quality smells.
+        </p>
+        
+        <div style="font-size:.65rem; letter-spacing:1px; color:var(--muted); margin-bottom: 12px; font-weight:700;">VIOLATIONS DETECTED</div>
+        <div id="g-violations-list" style="margin-bottom: 20px;">
+           <!-- JS will populate violations -->
+        </div>
+        
+        <div id="g-action-footer" style="padding:12px 16px; background:rgba(248,81,73,.08); color:#f85149; font-size:.75rem; font-family:'JetBrains Mono', monospace; border-left:3px solid #f85149; font-weight:600;">
+          ✕ MERGE BLOCKED: Quality Gate Failed. Please fix the technical debt.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="tooltip"></div>
+
+<script>
+const API = window.location.origin;
+let currentGraph = null;
+let simulation = null;
+let svgZoom = null;
+let currentFilePath = null;
+let currentIssues = [];
+
+// ── Tabs ──────────────────────────────────
+function switchTab(e, name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  e.target.classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+}
+
+// ── Load Repo ─────────────────────────────
+async function loadRepo() {
+  const src    = document.getElementById('repo-input').value.trim();
+  const branch = document.getElementById('branch-select').value;
+  const force  = document.getElementById('force-cb').checked;
+  if (!src) return alert('Enter a repo URL or local path');
+
+  setLoading(true, 'Cloning & scanning…');
+  try {
+    const res = await fetch(API + '/api/librarian/process', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({input_source: src, branch, force})
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
+    const data = await res.json();
+    currentGraph = data;
+    renderStats(data);
+    renderTree(data);
+    renderGraph(data);
+    fetchCommits(src);
+    fetchAlerts();
+    loadMentorData(src);
+  } catch(e) {
+    alert('Error: ' + e.message);
+  } finally {
+    setLoading(false);
+  }
+}
+
+function setLoading(on, msg) {
+  document.getElementById('load-btn').disabled = on;
+  document.getElementById('status-wrap').style.display = on ? 'flex' : 'none';
+  if (msg) document.getElementById('status-text').textContent = msg;
+}
+
+// ── Stats ─────────────────────────────────
+function renderStats(d) {
+  document.getElementById('stats-empty').style.display   = 'none';
+  document.getElementById('stats-content').style.display = 'block';
+  document.getElementById('s-name').textContent   = d.project_name;
+  document.getElementById('s-branch').textContent = d.branch;
+  document.getElementById('s-files').textContent  = d.total_files;
+  document.getElementById('s-nodes').textContent  = d.nodes.length;
+  document.getElementById('s-edges').textContent  = d.edges.length;
+  document.getElementById('s-chunks').textContent = d.total_chunks_embedded ?? '—';
+  document.getElementById('s-time').textContent   = d.processed_at ? new Date(d.processed_at).toLocaleString() : '—';
+  document.getElementById('s-cache').innerHTML    = d.from_cache
+    ? '<span class="cache-badge">⚡ cache</span>'
+    : '<span class="badge">🔄 fresh</span>';
+
+  const pct = Math.round((d.documented_ratio || 0) * 100);
+  document.getElementById('s-doc-pct').textContent = pct + '%';
+  const bar = document.getElementById('s-doc-bar');
+  bar.style.width = pct + '%';
+  bar.style.background = pct > 60 ? 'var(--accent2)' : pct > 30 ? 'var(--accent3)' : 'var(--danger)';
+
+  const langs = {};
+  d.nodes.filter(n => n.language).forEach(n => langs[n.language] = (langs[n.language] || 0) + 1);
+  document.getElementById('s-langs').innerHTML = Object.entries(langs)
+    .sort((a,b) => b[1]-a[1]).slice(0,8)
+    .map(([l,c]) => '<span class="tag">' + l + ' (' + c + ')</span>').join('');
+}
+
+// ── File Tree ─────────────────────────────
+function renderTree(data) {
+  const fileNodes = data.nodes.filter(n => n.type === 'file');
+  document.getElementById('file-count').textContent = fileNodes.length + ' files';
+
+  const root = {};
+  fileNodes.forEach(n => {
+    const parts = n.id.split('/');
+    let cur = root;
+    parts.forEach((p, i) => {
+      if (!cur[p]) cur[p] = i === parts.length - 1 ? {__file: n} : {};
+      cur = cur[p];
+    });
+  });
+
+  const body = document.getElementById('tree-body');
+  body.innerHTML = '';
+  body.appendChild(buildTreeDom(root, data.project_root, 0));
+}
+
+function buildTreeDom(node, projectRoot, depth) {
+  const frag = document.createDocumentFragment();
+  Object.keys(node).sort().forEach(key => {
+    if (key === '__file') return;
+    const val    = node[key];
+    const isFile = !!val.__file;
+    const item   = document.createElement('div');
+    item.className = 'tree-item';
+    item.style.paddingLeft = (depth * 14 + 8) + 'px';
+
+    if (isFile) {
+      const fn = val.__file;
+      item.innerHTML = '<span class="icon">' + langIcon(fn.language) + '</span><span class="tree-label" title="' + fn.id + '">' + key + '</span>';
+      item.onclick = function() { loadFilePreview(fn.id, projectRoot, item); };
+    } else {
+      item.innerHTML = '<span class="icon">📂</span><span class="tree-label" style="color:var(--folder-c)">' + key + '/</span>';
+      const children = document.createElement('div');
+      children.appendChild(buildTreeDom(val, projectRoot, depth + 1));
+      let open = true;
+      item.onclick = function(e) { e.stopPropagation(); open=!open; children.style.display=open?'block':'none'; };
+      frag.appendChild(item);
+      frag.appendChild(children);
+      return;
+    }
+    frag.appendChild(item);
+  });
+  return frag;
+}
+
+function langIcon(lang) {
+  const m = {python:'🐍',javascript:'🟨',typescript:'🔷',html:'🌐',css:'🎨',json:'📋',markdown:'📝',go:'🐹',java:'☕',ruby:'💎',yaml:'⚙️'};
+  return m[lang] || '📄';
+}
+
+// ── File Preview ──────────────────────────
+async function loadFilePreview(relPath, projectRoot, el) {
+  document.querySelectorAll('.tree-item.active').forEach(i => i.classList.remove('active'));
+  if (el) el.classList.add('active');
+
+  const fullPath = (projectRoot || '').replace(/\\/g, '/').replace(/\/$/, '') + '/' + relPath;
+  currentFilePath = fullPath;
+  document.getElementById('preview-path').textContent = relPath;
+  document.getElementById('impact-target').textContent = relPath;
+  
+  // Reset Guardian UI
+  document.getElementById('btn-review').style.display = 'block';
+  document.getElementById('btn-heal').style.display = 'none';
+  document.getElementById('btn-save').style.display = 'block';
+  document.getElementById('guardian-overlay').style.display = 'none';
+
+  try {
+    const res = await fetch(API + '/api/librarian/file?full_path=' + encodeURIComponent(fullPath));
+    if (!res.ok) throw new Error('Not found');
+    const {content} = await res.json();
+    document.getElementById('preview-empty').style.display = 'none';
+    const view = document.getElementById('code-view');
+    view.style.display = 'block';
+    view.value = content;
+  } catch(e) {
+    document.getElementById('code-view').value = '# Could not load: ' + e.message;
+    document.getElementById('code-view').style.display = 'block';
+    document.getElementById('preview-empty').style.display = 'none';
+  }
+}
+
+// ── D3 Force Graph ────────────────────────
+function renderGraph(data) {
+  document.getElementById('graph-empty').style.display = 'none';
+  const svgEl = document.getElementById('graph-svg');
+  svgEl.style.display = 'block';
+
+  const svg = d3.select('#graph-svg');
+  svg.selectAll('*').remove();
+
+  const LIMIT = 250;
+  const nodes = data.nodes.slice(0, LIMIT).map(n => Object.assign({}, n));
+  const ids   = new Set(nodes.map(n => n.id));
+  const links = data.edges
+    .filter(e => ids.has(e.source) && ids.has(e.target))
+    .slice(0, 500)
+    .map(e => ({source: e.source, target: e.target, relation: e.relation}));
+
+  document.getElementById('node-count').textContent =
+    nodes.length + ' nodes · ' + links.length + ' edges' +
+    (data.nodes.length > LIMIT ? ' (first ' + LIMIT + ')' : '');
+
+  const W = svgEl.clientWidth || 800;
+  const H = svgEl.clientHeight || 400;
+
+  const g = svg.append('g');
+  svgZoom = d3.zoom().scaleExtent([0.05, 5])
+    .on('zoom', e => g.attr('transform', e.transform));
+  svg.call(svgZoom);
+
+  svg.append('defs').append('marker')
+    .attr('id','arr').attr('viewBox','0 -5 10 10')
+    .attr('refX',15).attr('refY',0)
+    .attr('markerWidth',5).attr('markerHeight',5)
+    .attr('orient','auto')
+    .append('path').attr('d','M0,-5L10,0L0,5')
+    .attr('fill','rgba(88,166,255,.4)');
+
+  const link = g.append('g').selectAll('line').data(links).join('line')
+    .attr('stroke', d => d.relation === 'imports' ? 'rgba(63,185,80,.5)' : 'rgba(88,166,255,.3)')
+    .attr('marker-end','url(#arr)');
+
+  const node = g.append('g').selectAll('g').data(nodes).join('g')
+    .call(d3.drag()
+      .on('start', (e,d) => { if(!e.active) sim.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })
+      .on('drag',  (e,d) => { d.fx=e.x; d.fy=e.y; })
+      .on('end',   (e,d) => { if(!e.active) sim.alphaTarget(0); d.fx=null; d.fy=null; }));
+
+  node.append('circle')
+    .attr('r', d => d.type==='folder' ? 7 : 5)
+    .attr('fill', d => d.type==='folder' ? 'var(--folder-c)' : nodeColor(d.language))
+    .attr('stroke', 'rgba(255,255,255,.15)').attr('stroke-width', 1)
+    .style('cursor','pointer')
+    .on('mouseover', (e,d) => {
+      const tip = document.getElementById('tooltip');
+      tip.style.display = 'block';
+      tip.innerHTML = '<strong>' + d.label + '</strong><br/>'
+        + '<span style="color:var(--muted);font-size:.7rem;">' + d.id + '</span>'
+        + (d.language ? '<br/><span style="color:var(--accent2);">' + d.language + '</span>' : '')
+        + (d.size_bytes ? '<br/><span style="color:var(--muted);">' + (d.size_bytes/1024).toFixed(1) + ' KB</span>' : '');
+    })
+    .on('mousemove', e => {
+      document.getElementById('tooltip').style.left = (e.clientX+14)+'px';
+      document.getElementById('tooltip').style.top  = (e.clientY-10)+'px';
+    })
+    .on('mouseout', () => document.getElementById('tooltip').style.display = 'none')
+    .on('click', (e,d) => {
+      if (d.type==='file' && currentGraph) loadFilePreview(d.id, currentGraph.project_root, null);
+    });
+
+  node.append('text')
+    .attr('dx',9).attr('dy',3)
+    .attr('fill','var(--muted)')
+    .style('font-family','JetBrains Mono,monospace').style('font-size','9px')
+    .style('pointer-events','none')
+    .text(d => d.label.length > 18 ? d.label.slice(0,16)+'…' : d.label);
+
+  const sim = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(links).id(d => d.id).distance(60))
+    .force('charge', d3.forceManyBody().strength(-80))
+    .force('center', d3.forceCenter(W/2, H/2))
+    .force('collision', d3.forceCollide(12))
+    .on('tick', () => {
+      link
+        .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+        .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+      node.attr('transform', d => 'translate('+d.x+','+d.y+')');
+    });
+  simulation = sim;
+}
+
+function nodeColor(lang) {
+  const m = {python:'#3fb950',javascript:'#d29922',typescript:'#58a6ff',html:'#ff7b72',css:'#d2a8ff',go:'#79c0ff',java:'#ff9f43',ruby:'#f85149'};
+  return m[lang] || '#7d8590';
+}
+
+function resetZoom() {
+  d3.select('#graph-svg').transition().duration(400).call(svgZoom.transform, d3.zoomIdentity);
+}
+
+// ── Alerts ────────────────────────────────
+async function fetchAlerts() {
+  try {
+    const res = await fetch(API + '/api/alerts');
+    if (!res.ok) return;
+    const alerts = await res.json();
+    const unread = alerts.filter(a => !a.read).length;
+    const badge  = document.getElementById('unread-badge');
+    badge.textContent    = unread ? unread + ' new' : '';
+    badge.style.display  = unread ? 'inline' : 'none';
+
+    const body = document.getElementById('alerts-body');
+    if (!alerts.length) {
+      body.innerHTML = '<div class="empty-state" style="height:100%;padding:0;"><div class="big-icon" style="font-size:1.5rem;">💤</div><p>No alerts</p></div>';
+      return;
+    }
+    body.innerHTML = alerts.map(a =>
+      '<div class="alert-item">' +
+        '<div class="alert-dot ' + a.severity + '"></div>' +
+        '<div><div class="alert-title">' + a.title + '</div>' +
+        '<div class="alert-msg">' + a.message + '</div>' +
+        '<div style="color:var(--muted);font-size:.65rem;margin-top:3px;">' + new Date(a.timestamp).toLocaleTimeString() + '</div>' +
+      '</div></div>'
+    ).join('');
+  } catch(_) {}
+}
+
+async function clearAlerts() {
+  await fetch(API + '/api/alerts', {method:'DELETE'});
+  fetchAlerts();
+}
+
+// ── Commits ───────────────────────────────
+async function fetchCommits(src) {
+  try {
+    const res = await fetch(API + '/api/librarian/history?input_source=' + encodeURIComponent(src) + '&max_count=20');
+    if (!res.ok) return;
+    const commits = await res.json();
+    document.getElementById('commits-empty').style.display = commits.length ? 'none' : 'block';
+    document.getElementById('commits-list').innerHTML = commits.map(c =>
+      '<div class="commit-item">' +
+        '<span class="commit-type ct-' + c.commit_type + '">' + c.commit_type + '</span>' +
+        '<div><div class="commit-msg">' + c.message + '</div>' +
+        '<div class="commit-meta">' + c.author + ' · ' + c.date + ' · <code style="color:var(--accent)">' + c.hash + '</code></div>' +
+      '</div></div>'
+    ).join('');
+  } catch(_) {}
+}
+
+// ── Guardian UI ───────────────────────────
+async function runReview() {
+  if (!currentFilePath) return;
+  const content = document.getElementById('code-view').value;
+  const btn = document.getElementById('btn-review');
+  const orgText = btn.innerHTML;
+  btn.innerHTML = '⏳...'; btn.disabled = true;
+
+  try {
+    const res = await fetch(API + '/api/guardian/review', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({file_name: document.getElementById('preview-path').textContent, code_content: content})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Review failed');
+    
+    // Configure Dashboard View
+    document.getElementById('guardian-dashboard').style.display = 'block';
+    
+    // Set Header/Repo meta
+    document.getElementById('g-repo-name').textContent = currentGraph?.project_name || "project";
+    document.getElementById('g-repo-total').textContent = currentGraph ? currentGraph.nodes.length + " files" : "";
+    document.getElementById('g-file-name').textContent = document.getElementById('preview-path').textContent;
+    document.getElementById('g-pr-name').textContent = document.getElementById('preview-path').textContent.split('/').pop();
+    
+    currentIssues = data.issues || [];
+    const ul = document.getElementById('g-violations-list');
+    ul.innerHTML = '';
+    
+    const isPassed = data.passed;
+    const red = '#f85149';
+    const green = '#3fb950';
+    const color = isPassed ? green : red;
+    
+    // Update Styles globally
+    document.getElementById('g-overall-box').style.borderColor = isPassed ? `rgba(63,185,80,.4)` : `rgba(248,81,73,.4)`;
+    document.getElementById('g-overall-box').style.background = isPassed ? `rgba(63,185,80,.05)` : `rgba(248,81,73,.05)`;
+    document.getElementById('g-overall-icon').style.background = color;
+    document.getElementById('g-overall-icon').textContent = isPassed ? '✓' : '✕';
+    document.getElementById('g-overall-title').style.color = color;
+    document.getElementById('g-overall-subtitle').style.color = color;
+    document.getElementById('g-overall-title').textContent = isPassed ? 'QUALITY GATE: PASSED' : 'QUALITY GATE: BLOCKED';
+    
+    document.getElementById('g-shield-icon').style.color = color;
+    document.getElementById('g-shield-icon').style.borderColor = isPassed ? `rgba(63,185,80,.25)` : `rgba(248,81,73,.25)`;
+    document.getElementById('g-shield-icon').style.background = isPassed ? `rgba(63,185,80,.08)` : `rgba(248,81,73,.08)`;
+    
+    document.getElementById('g-action-icon').style.color = color;
+    document.getElementById('g-action-icon').style.borderColor = isPassed ? `rgba(63,185,80,.4)` : `rgba(248,81,73,.4)`;
+    document.getElementById('g-action-icon').style.background = isPassed ? `rgba(63,185,80,.1)` : `rgba(248,81,73,.1)`;
+    document.getElementById('g-action-icon').textContent = isPassed ? '✓' : '✕';
+    document.getElementById('g-action-title').textContent = isPassed ? 'Merge Approved' : 'Merge Blocked';
+    document.getElementById('g-action-subtitle').style.color = color;
+    document.getElementById('g-action-box').style.borderColor = isPassed ? `rgba(63,185,80,.3)` : `rgba(248,81,73,.3)`;
+    
+    document.getElementById('g-action-footer').style.background = isPassed ? `rgba(63,185,80,.08)` : `rgba(248,81,73,.08)`;
+    document.getElementById('g-action-footer').style.color = color;
+    document.getElementById('g-action-footer').style.borderLeftColor = color;
+    document.getElementById('g-action-footer').textContent = isPassed ? '✓ MERGE ALLOWED: Quality requirements met.' : '✕ MERGE BLOCKED: Quality Gate Failed. Please fix the technical debt.';
+    
+    document.getElementById('g-action-desc').textContent = data.message;
+    
+    document.getElementById('g-pr-status').style.color = color;
+    document.getElementById('g-pr-status').style.background = isPassed ? `rgba(63,185,80,.15)` : `rgba(248,81,73,.15)`;
+    document.getElementById('g-pr-status').textContent = isPassed ? 'PASSED' : 'BLOCKED';
+    
+    document.getElementById('g-badge-pill').style.color = color;
+    document.getElementById('g-badge-pill').style.background = isPassed ? `rgba(63,185,80,.15)` : `rgba(248,81,73,.15)`;
+    document.getElementById('g-badge-pill').innerHTML = `CI/CD ENFORCER <span style="display:inline-block; width:6px;height:6px;border-radius:50%;background:${color};box-shadow:0 0 6px ${color};"></span>`;
+    
+    // Stats updates
+    const issueCount = data.issues ? data.issues.length : 0;
+    document.getElementById('g-issue-count').textContent = issueCount;
+    document.getElementById('g-issue-count').className = isPassed ? 'g-stat-val green' : 'g-stat-val red';
+    document.getElementById('g-stat-issues').style.borderColor = isPassed ? `rgba(63,185,80,.4)` : `rgba(248,81,73,.4)`;
+    document.getElementById('g-issue-desc').textContent = isPassed ? 'No issues found' : 'Fix before merge';
+    
+    document.getElementById('g-score-val').textContent = isPassed ? '98%' : Math.max(20, 100 - (issueCount * 15)) + '%';
+    document.getElementById('g-score-val').className = isPassed ? 'g-stat-val green' : 'g-stat-val red';
+    document.getElementById('g-stat-score').style.borderColor = isPassed ? `rgba(63,185,80,.4)` : `rgba(248,81,73,.4)`;
+    
+    document.getElementById('g-btn-heal').style.display = isPassed ? 'none' : 'block';
+    
+    if (isPassed) {
+       ul.innerHTML = '<div style="color:#3fb950; font-family:monospace;">> No violations detected. Code is pristine.</div>';
+    } else {
+       data.issues.forEach(i => {
+         const div = document.createElement('div');
+         div.className = 'g-violation-item';
+         div.textContent = i;
+         ul.appendChild(div);
+       });
+    }
+  } catch(e) { alert('Review Error: ' + e.message); }
+  btn.innerHTML = orgText; btn.disabled = false;
+}
+
+async function runHeal() {
+  if (!currentFilePath) return;
+  const content = document.getElementById('code-view').value;
+  const btn = document.getElementById('g-btn-heal');
+  const orgText = btn.innerHTML;
+  btn.innerHTML = '⏳ Working...'; btn.disabled = true;
+
+  try {
+    const res = await fetch(API + '/api/guardian/heal', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        file_name: document.getElementById('preview-path').textContent, 
+        code_content: content, 
+        issues: currentIssues
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Heal failed');
+    
+    // Put code back into the viewer
+    document.getElementById('code-view').value = data.fixed_code;
+    
+    // Close dashboard and allow user to save
+    document.getElementById('guardian-dashboard').style.display = 'none';
+    
+    document.getElementById('guardian-overlay').style.display = 'block';
+    document.getElementById('guardian-status-mini').innerHTML = '✨ <span style="color:var(--accent)">' + data.message + ' (Unsaved—please hit Save)</span>';
+  } catch(e) { alert('Heal Error: ' + e.message); }
+  btn.innerHTML = orgText; btn.disabled = false;
+}
+
+async function saveFile() {
+  if (!currentFilePath) return;
+  const content = document.getElementById('code-view').value;
+  const btn = document.getElementById('btn-save');
+  const orgText = btn.innerHTML;
+  btn.innerHTML = '💾...'; btn.disabled = true;
+
+  try {
+    const res = await fetch(API + '/api/guardian/save', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({file_path: currentFilePath, content: content})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Save failed');
+    
+    document.getElementById('guardian-overlay').style.display = 'none';
+    fetchAlerts(); // force alert refresh
+  } catch(e) { alert('Save Error: ' + e.message); }
+  btn.innerHTML = orgText; btn.disabled = false;
+}
+
+// ── Architect UI ──────────────────────────
+let currentImpactResults = [];
+
+async function syncJira() {
+  const key = document.getElementById('jira-key').value.trim();
+  if (!key) return;
+  const info = document.getElementById('jira-info');
+  info.style.display = 'block'; info.textContent = '⏳ Fetching...';
+  
+  try {
+    const res = await fetch(API + '/api/architect/jira/ticket/' + key);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to fetch Jira');
+    info.innerHTML = `✅ <strong>${data.summary}</strong> [${data.status}]`;
+  } catch(e) { info.textContent = '❌ ' + e.message; }
+}
+
+async function runBuild() {
+  const reqs = document.getElementById('build-reqs').value.trim();
+  if (!reqs) return alert('Enter requirements first');
+  
+  try {
+    const res = await fetch(API + '/api/architect/build', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({requirements: reqs, project_name: "ai_gen"})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Build failed');
+    
+    alert('Scaffold Complete! Auto-loading project...');
+    document.getElementById('repo-input').value = data.project_root;
+    loadRepo();
+  } catch(e) { alert('Build Error: ' + e.message); }
+}
+
+async function runImpact() {
+  if (!currentFilePath || !currentGraph) return alert('Load a project and select a file first');
+  const relPath = document.getElementById('preview-path').textContent;
+  const change = document.getElementById('change-desc').value.trim();
+  if (!change) return alert('Describe the change first');
+
+  const resWrap = document.getElementById('impact-results');
+  const list = document.getElementById('impact-list');
+  resWrap.style.display = 'block';
+  list.innerHTML = '⏳ Analyzing blast radius...';
+
+  try {
+    const res = await fetch(API + '/api/architect/impact', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        project_name: currentGraph.project_name,
+        target_file: relPath,
+        proposed_change: change
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Impact analysis failed');
+
+    currentImpactResults = data.impacted_files;
+    document.getElementById('impact-count').textContent = data.total_impacted;
+    
+    list.innerHTML = data.impacted_files.map(f => `
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:8px; margin-bottom:6px; font-size:.68rem;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+           <span style="font-family:monospace; color:var(--text);">${f.file_path}</span>
+           <span style="color:${f.severity === 'high' ? 'var(--danger)' : f.severity === 'medium' ? 'var(--accent3)' : 'var(--accent2)'}; font-weight:700; text-transform:uppercase; font-size:.6rem;">${f.severity}</span>
+        </div>
+        <div style="color:var(--muted); line-height:1.3;">${f.reason}</div>
+      </div>
+    `).join('');
+    
+    document.getElementById('btn-jira-tasks').disabled = data.total_impacted === 0;
+  } catch(e) { list.innerHTML = `<span style="color:var(--danger)">Error: ${e.message}</span>`; }
+}
+
+async function createJiraTasks() {
+  const parentKey = document.getElementById('jira-key').value.trim();
+  if (!parentKey) return alert('Enter a parent Jira Ticket Key first');
+  
+  const tasks = currentImpactResults.map(f => `Fix/Verify impact in ${f.file_path} [Severity: ${f.severity}]`);
+  
+  try {
+    const res = await fetch(API + '/api/architect/jira/tasks', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({parent_key: parentKey, tasks: tasks})
+    });
+    const data = await res.json();
+    alert(data.message);
+  } catch(e) { alert('Jira Error: ' + e.message); }
+}
+
+// ── Mentor UI ─────────────────────────────
+async function loadMentorData(src) {
+  loadOnboarding();
+  loadQuest(src);
+}
+
+async function loadOnboarding() {
+  const role = document.getElementById('mentor-role').value;
+  const list = document.getElementById('onboarding-list');
+  list.innerHTML = '<div style="font-size:.7rem; color:var(--muted)">⏳ Loading checklist...</div>';
+  
+  try {
+    const res = await fetch(API + '/api/mentor/onboarding/' + role);
+    const data = await res.json();
+    list.innerHTML = data.map(s => `
+      <div style="display:flex; gap:10px; align-items:flex-start; background:var(--surface); padding:8px; border-radius:6px; border:1px solid var(--border);">
+        <input type="checkbox" ${s.is_completed ? 'checked' : ''} style="margin-top:2px;">
+        <div style="flex:1;">
+          <div style="font-size:.75rem; font-weight:600; color:var(--text);">${s.task}</div>
+          <div style="font-size:.65rem; color:var(--muted);">${s.description}</div>
+        </div>
+      </div>
+    `).join('');
+  } catch(e) { list.innerHTML = `<div style="color:var(--danger); font-size:.7rem;">Failed to load onboarding</div>`; }
+}
+
+async function loadQuest(src) {
+  try {
+    const res = await fetch(API + '/api/mentor/quest?repo_url=' + encodeURIComponent(src));
+    const data = await res.json();
+    document.getElementById('quest-title').textContent = data.title;
+    document.getElementById('quest-desc').textContent = data.issue_description;
+    document.getElementById('quest-xp').textContent = '+' + data.xp_reward + ' XP';
+    document.getElementById('quest-link').href = data.sonar_link;
+  } catch(e) { console.error('Quest error:', e); }
+}
+
+async function askMentor() {
+  const input = document.getElementById('mentor-input');
+  const q = input.value.trim();
+  if (!q) return;
+  
+  const box = document.getElementById('mentor-chat-box');
+  const userRole = document.getElementById('mentor-role').value;
+  const repoUrl = document.getElementById('repo-input').value.trim();
+  
+  // Append user message
+  const userDiv = document.createElement('div');
+  userDiv.style = "margin-bottom:12px; background:rgba(88,166,255,.1); padding:8px; border-radius:6px; border-left:3px solid var(--accent);";
+  userDiv.innerHTML = `<strong>You:</strong> ${q}`;
+  box.appendChild(userDiv);
+  input.value = '';
+  box.scrollTop = box.scrollHeight;
+  
+  // Append loading
+  const aiDiv = document.createElement('div');
+  aiDiv.style = "margin-bottom:12px; background:var(--surface); padding:8px; border-radius:6px; border-left:3px solid var(--accent2);";
+  aiDiv.innerHTML = `<strong>Mentor:</strong> <span style="color:var(--muted)">🤔 Thinking...</span>`;
+  box.appendChild(aiDiv);
+  
+  try {
+    const res = await fetch(API + '/api/mentor/chat', {
+       method: 'POST',
+       headers: {'Content-Type': 'application/json'},
+       body: JSON.stringify({
+         question: q,
+         user_role: userRole,
+         repo_url: repoUrl
+       })
+    });
+    const data = await res.json();
+    aiDiv.innerHTML = `<strong>Mentor:</strong> ${data.answer.replace(/\n/g, '<br>')}`;
+    if (data.sources && data.sources.length > 0) {
+      aiDiv.innerHTML += `<div style="margin-top:8px; font-size:.6rem; color:var(--muted)">Sources: ${data.sources.join(', ')}</div>`;
+    }
+  } catch(e) {
+    aiDiv.innerHTML = `<strong>Mentor:</strong> <span style="color:var(--danger)">Sorry, I encountered an error.</span>`;
+  }
+  box.scrollTop = box.scrollHeight;
+}
+
+// Auto-poll alerts
+setInterval(fetchAlerts, 8000);
+fetchAlerts();
+</script>
+</body>
+</html>
