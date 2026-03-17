@@ -2,13 +2,12 @@
 
 import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { GitBranch, ArrowLeft, Loader2, Check, Github, AlertCircle, Lock, Unlock, Search } from "lucide-react"
-import { analyzeRepository, getGithubClientId, getUserRepos, GithubRepo } from "@/lib/api"
-import { upsertRepo, setActiveRepoId, getAllRepos } from "@/lib/repo-store"
+import { GitBranch, ArrowLeft, Loader2, Check, AlertCircle } from "lucide-react"
+import { analyzeRepository } from "@/lib/api"
+import { upsertRepo, setActiveRepoId } from "@/lib/repo-store"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 
 const ANALYSIS_STEPS = [
   "Cloning repository...",
@@ -23,14 +22,6 @@ const STEP_INTERVAL_MS = 2800
 export default function ImportRepositoryPage() {
   const router = useRouter()
 
-  // Auth & Repos State
-  const [githubToken, setGithubToken] = useState<string | null>(null)
-  const [clientId, setClientId] = useState<string | null>(null)
-  const [repos, setRepos] = useState<GithubRepo[]>([])
-  const [filteredRepos, setFilteredRepos] = useState<GithubRepo[]>([])
-  const [isFetchingRepos, setIsFetchingRepos] = useState(false)
-  const [searchQuery, setSearchQuery] = useState("")
-
   // Selection State
   const [selectedRepoUrl, setSelectedRepoUrl] = useState("")
   const [branch, setBranch] = useState("main")
@@ -44,61 +35,10 @@ export default function ImportRepositoryPage() {
 
   useEffect(() => {
     setMounted(true)
-
-    // Check for existing token
-    const token = localStorage.getItem("github_token")
-    if (token) {
-      setGithubToken(token)
-    }
-
-    // Fetch client ID for OAuth
-    getGithubClientId()
-      .then(res => setClientId(res.client_id))
-      .catch(err => console.error("Failed to fetch client ID", err))
-
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current)
     }
   }, [])
-
-  useEffect(() => {
-    if (githubToken) {
-      setIsFetchingRepos(true)
-      getUserRepos(githubToken)
-        .then(data => {
-          setRepos(data)
-          setFilteredRepos(data)
-        })
-        .catch(err => {
-          setError("Failed to fetch repositories. Token may be expired.")
-          localStorage.removeItem("github_token")
-          setGithubToken(null)
-        })
-        .finally(() => setIsFetchingRepos(false))
-    }
-  }, [githubToken])
-
-  useEffect(() => {
-    if (searchQuery.trim() === "") {
-      setFilteredRepos(repos)
-    } else {
-      const query = searchQuery.toLowerCase()
-      setFilteredRepos(repos.filter(r => r.full_name.toLowerCase().includes(query)))
-    }
-  }, [searchQuery, repos])
-
-  const handleConnectGithub = () => {
-    if (!clientId) return
-    const redirectUri = `${window.location.origin}/oauth/callback`
-    window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&scope=repo&redirect_uri=${encodeURIComponent(redirectUri)}`
-  }
-
-  const handleDisconnect = () => {
-    localStorage.removeItem("github_token")
-    setGithubToken(null)
-    setRepos([])
-    setFilteredRepos([])
-  }
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault()
@@ -108,11 +48,7 @@ export default function ImportRepositoryPage() {
     setCurrentStep(0)
     setError(null)
 
-    // Append OAuth token to URL if we have one to support private repositories seamlessly
-    let finalUrl = selectedRepoUrl.trim()
-    if (githubToken && finalUrl.startsWith("https://github.com/")) {
-      finalUrl = finalUrl.replace("https://github.com/", `https://x-access-token:${githubToken}@github.com/`)
-    }
+    const finalUrl = selectedRepoUrl.trim()
 
     const PENULTIMATE = ANALYSIS_STEPS.length - 2
     intervalRef.current = setInterval(() => {
@@ -131,7 +67,7 @@ export default function ImportRepositoryPage() {
       if (intervalRef.current) clearInterval(intervalRef.current)
       setCurrentStep(ANALYSIS_STEPS.length - 1)
 
-      const storeUrl = selectedRepoUrl.trim() // store clean URL without token
+      const storeUrl = selectedRepoUrl.trim()
       const newId = upsertRepo(storeUrl, data)
       setActiveRepoId(newId)
 
@@ -164,7 +100,7 @@ export default function ImportRepositoryPage() {
             </div>
             <CardTitle className="text-2xl italic">Import Your Repository</CardTitle>
             <CardDescription>
-              {githubToken ? "Select a repository to analyze codebase architecture" : "Connect with GitHub to seamlessly import your repositories"}
+              Provide a public repository URL to analyze the codebase architecture
             </CardDescription>
           </CardHeader>
 
@@ -177,29 +113,22 @@ export default function ImportRepositoryPage() {
             </div>
           )}
 
-          {!githubToken ? (
-            // Not Authenticated View
             <div className="flex flex-col items-center justify-center py-6 gap-8">
-              <Button
-                onClick={handleConnectGithub}
-                disabled={!clientId}
-                className="w-full sm:w-auto h-12 px-8 bg-foreground text-background hover:bg-foreground/90 font-semibold"
-              >
-                <Github className="mr-2 h-5 w-5" />
-                Connect with GitHub
-              </Button>
-
-              <div className="flex w-full items-center gap-4 text-xs text-muted-foreground/60 uppercase tracking-widest before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border">
-                or use public URL
-              </div>
-
               <form onSubmit={handleSubmit} className="w-full flex gap-3 flex-col sm:flex-row">
                 <Input
                   type="url"
                   placeholder="https://github.com/user/repo"
                   value={selectedRepoUrl}
                   onChange={(e) => setSelectedRepoUrl(e.target.value)}
-                  className="h-12"
+                  className="h-12 flex-1"
+                  disabled={isLoading}
+                />
+                <Input
+                  type="text"
+                  placeholder="branch (e.g. main)"
+                  value={branch}
+                  onChange={(e) => setBranch(e.target.value)}
+                  className="h-12 w-32"
                   disabled={isLoading}
                 />
                 <Button
@@ -211,94 +140,6 @@ export default function ImportRepositoryPage() {
                 </Button>
               </form>
             </div>
-          ) : (
-            // Authenticated View
-            <div className="space-y-6">
-              <div className="flex items-center justify-between border-b border-border pb-4">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <Github className="h-4 w-4 text-primary" />
-                  Connected to GitHub
-                </div>
-                <Button variant="ghost" size="sm" onClick={handleDisconnect} className="text-xs text-muted-foreground hover:text-destructive">
-                  Disconnect
-                </Button>
-              </div>
-
-              {isFetchingRepos ? (
-                <div className="flex flex-col items-center justify-center py-12 gap-3">
-                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                  <span className="text-sm text-muted-foreground">Loading your repositories...</span>
-                </div>
-              ) : (
-                <>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/50" />
-                    <Input
-                      type="text"
-                      placeholder="Search repositories..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
-
-                  <div className="max-h-64 overflow-y-auto rounded-lg border border-border bg-muted/20 p-1 space-y-1">
-                    {filteredRepos.length === 0 ? (
-                      <div className="py-8 text-center text-sm text-muted-foreground italic">
-                        No repositories found.
-                      </div>
-                    ) : (
-                      filteredRepos.map((repo) => (
-                        <button
-                          key={repo.id}
-                          onClick={() => setSelectedRepoUrl(repo.clone_url)}
-                          className={`w-full flex items-center justify-between p-3 rounded-lg transition-all text-left border ${selectedRepoUrl === repo.clone_url ? 'bg-primary/5 border-primary/50' : 'hover:bg-accent border-transparent'}`}
-                          disabled={isLoading}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className={`p-2 rounded-md ${repo.private ? "bg-warning/10 text-warning" : "bg-success/10 text-success"}`}>
-                              {repo.private ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
-                            </div>
-                            <div>
-                              <p className="text-sm font-semibold text-foreground leading-none mb-1">{repo.full_name}</p>
-                              {repo.description && <p className="text-xs text-muted-foreground truncate max-w-xs">{repo.description}</p>}
-                            </div>
-                          </div>
-                          {selectedRepoUrl === repo.clone_url && <Check className="h-4 w-4 text-primary" />}
-                        </button>
-                      ))
-                    )}
-                  </div>
-
-                  <div className="flex gap-4">
-                    <Input
-                      type="text"
-                      value={branch}
-                      onChange={(e) => setBranch(e.target.value)}
-                      placeholder="branch (e.g. main)"
-                      disabled={isLoading}
-                      className="w-1/3"
-                    />
-
-                    <Button
-                      onClick={() => handleSubmit()}
-                      disabled={isLoading || !selectedRepoUrl}
-                      className="flex-1 h-12"
-                    >
-                      {isLoading ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Processing...
-                        </>
-                      ) : (
-                        "Import Selected Repository"
-                      )}
-                    </Button>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
 
           {isLoading && (
             <div className="mt-8 flex flex-col gap-3 border-t border-border pt-6">
@@ -323,9 +164,6 @@ export default function ImportRepositoryPage() {
           )}
           </CardContent>
         </Card>
-        <div className="mt-6 text-center">
-            <small>OAuth authentication enables seamless imports of both public and private repositories.</small>
-        </div>
       </div>
     </main>
   )

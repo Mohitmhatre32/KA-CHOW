@@ -27,71 +27,46 @@ class DiagramService:
         with open(graph_path, "r", encoding="utf-8") as f:
             graph_data = json.load(f)
 
-        # Truncate graph data to avoid token max limits if repo is huge
-        nodes = graph_data.get("nodes", [])[:100]
-        edges = graph_data.get("edges", [])[:200]
+        # Final robustness pruning for Groq 12k token limits
+        clean_nodes = []
+        for node in graph_data.get("nodes", [])[:30]:
+            clean_nodes.append({
+                "id": node.get("id"),
+                "label": node.get("label"),
+                "type": node.get("type")
+            })
+            
+        clean_edges = []
+        for edge in graph_data.get("edges", [])[:40]:
+            clean_edges.append({
+                "s": edge.get("source"),
+                "t": edge.get("target")
+            })
         
         truncated_graph = {
-            "nodes": nodes,
-            "edges": edges,
-            "note": "Truncated for prompt size constraints" if len(graph_data.get("nodes", [])) > 100 else ""
+            "n": clean_nodes,
+            "e": clean_edges
         }
         
-        graph_str = json.dumps(truncated_graph, indent=2)
+        # Compact JSON to save tokens
+        graph_str = json.dumps(truncated_graph, separators=(",", ":"))
 
         prompt = f"""
-ROLE: Senior Software Architect and Visual Designer.
-TASK: Generate a **beautiful, highly-styled, and premium** system architecture diagram based on the provided Knowledge Graph data.
-DIAGRAM TYPE: {request.diagram_type}
-USER PROMPT OVERRIDE: {request.prompt_override or "None"}
+Architect & Designer. Create a Mermaid flowchart from: {graph_str}
+Type: {request.diagram_type}
 
-GRAPH DATA:
-{graph_str}
-
-REQUIREMENTS:
-1. Analyze the nodes (files/components) and edges (dependencies/imports).
-2. Create a Mermaid.js diagram using `graph LR` or `graph TD`.
-3. **CRITICAL: Add premium aesthetics for a DARK THEME website.** The website background is very dark, so edges/lines must be bright and highly visible. Use `classDef` to create bright, vibrant harmonic colors that pop. All nodes must use a class.
-   Example:
-   `classDef frontend fill:#2563eb,stroke:#93c5fd,stroke-width:2px,color:#ffffff,rx:8px,ry:8px;`
-   `classDef backend fill:#059669,stroke:#6ee7b7,stroke-width:2px,color:#ffffff,rx:8px,ry:8px;`
-   `classDef database fill:#7c3aed,stroke:#c4b5fd,stroke-width:2px,color:#ffffff,rx:8px,ry:8px;`
-4. Group related components into subgraphs (e.g., 'Frontend', 'Backend', 'Core Services'). Subgraphs should have a clean, logical flow.
-5. Keep the diagram macro-architectural. Don't clutter it with every single utility file. Focus on the main system flow.
-6. **CRITICAL MERMAID SYNTAX RULES:**
-   - Node IDs MUST be pure alphanumeric (e.g., `A`, `B1`, `ClientApp`). 
-   - DO NOT USE spaces, hyphens, slashes, or special characters in the Node ID itself.
-   - Example CORRECT: `FrontendWeb["Frontend/Web App"]:::client`
-   - Example INCORRECT: `Frontend/Web["Frontend/Web App"]:::client` (will cause a Parse Error!)
-   - Use appropriate shapes (`[ ]` for normal components, `[( )]` for databases, `{{ }}` for services).
-7. ONLY return the valid Mermaid code block. Do NOT use markdown code blocks like ```mermaid, JUST the raw mermaid code.
-
-EXAMPLE OUTPUT:
-%%{{ init: {{'theme': 'base', 'themeVariables': {{ 'primaryColor': '#1e293b', 'lineColor': '#f8fafc', 'textColor': '#f8fafc' }}}} }}%%
-graph LR
-    %% Styles
-    classDef client fill:#2563eb,stroke:#93c5fd,stroke-width:2px,color:#ffffff,rx:8px,ry:8px;
-    classDef server fill:#059669,stroke:#6ee7b7,stroke-width:2px,color:#ffffff,rx:8px,ry:8px;
-    classDef db fill:#7c3aed,stroke:#c4b5fd,stroke-width:2px,color:#ffffff,rx:8px,ry:8px;
-
-    subgraph "Frontend Layer"
-        A[Mobile App]:::client
-        B[Web Dashboard]:::client
-    end
-    
-    subgraph "Backend Services"
-        C(API Gateway):::server
-        D{{Auth Service}}:::server
-    end
-    
-    E[(PostgreSQL)]:::db
-
-    A --> C
-    B --> C
-    C --> D
-    D --> E
+RULES:
+1. Use `flowchart TD` or `flowchart LR`.
+2. **DO NOT USE SUBGRAPHS.** No grouping. Just nodes and connectors.
+3. Node IDs: alphanumeric only. 
+4. Aesthetics:
+   `classDef f fill:#3b82f6,stroke:#fff,color:#fff,rx:5;`
+   `classDef b fill:#10b981,stroke:#fff,color:#fff,rx:5;`
+   `classDef d fill:#8b5cf6,stroke:#fff,color:#fff,rx:5;`
+5. Labels: [Filename with extension].
+6. Styling: `nodeID["Label"]:::f` (or :::b, :::d).
+7. OUTPUT: RAW MERMAID ONLY.
 """
-
         try:
             raw_mermaid = generate_text(prompt, "You are a specialized Diagram Agent.")
             raw_mermaid = raw_mermaid.strip()
