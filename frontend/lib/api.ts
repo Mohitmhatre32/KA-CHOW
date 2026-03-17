@@ -548,3 +548,26 @@ export async function exchangeGithubToken(code: string): Promise<{ access_token:
 export async function getUserRepos(token: string): Promise<GithubRepo[]> {
   return post<GithubRepo[]>("/api/github/repos", { token })
 }
+
+// ─── Diagram Agent ────────────────────────────────────────────────────────────
+
+export interface DiagramRequest {
+  repo_url: string
+  diagram_type?: string
+  prompt_override?: string
+}
+
+export interface DiagramResponse {
+  repo_url: string
+  diagram_type: string
+  mermaid_markdown: string
+  message: string
+}
+
+/**
+ * Generates an architecture diagram for an ingested repository.
+ * Endpoint: POST /api/diagram/generate
+ */
+export async function generateArchitectureDiagram(req: DiagramRequest): Promise<DiagramResponse> {
+  return post<DiagramResponse>("/api/diagram/generate", req)
+}
