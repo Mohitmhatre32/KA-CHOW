@@ -6,9 +6,23 @@ import '../../models/ticket.dart';
 import '../../view_models/tickets_view_model.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/mesh_background.dart';
+import '../widgets/create_ticket_sheet.dart';
 
 class TicketManagementScreen extends ConsumerWidget {
   const TicketManagementScreen({super.key});
+
+  void _showCreateTicketSheet(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => CreateTicketSheet(
+        onCreate: (title, description, priority) {
+          ref.read(ticketsProvider.notifier).createTicket(title, description, priority: priority);
+        },
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -24,6 +38,17 @@ class TicketManagementScreen extends ConsumerWidget {
         ),
         centerTitle: true,
         backgroundColor: Colors.transparent,
+      ),
+      floatingActionButton: Container(
+        margin: const EdgeInsets.only(bottom: 20, right: 10),
+        child: FloatingActionButton(
+          onPressed: () => _showCreateTicketSheet(context, ref),
+          backgroundColor: AppColors.primary,
+          foregroundColor: Colors.black,
+          elevation: 10,
+          shape: const CircleBorder(),
+          child: const Icon(Icons.add_rounded, size: 32),
+        ),
       ),
       body: MeshBackground(
         child: CustomScrollView(
