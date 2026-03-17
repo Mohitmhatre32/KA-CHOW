@@ -65,7 +65,7 @@ function buildFromResponse(
     const meta: GraphMeta = {
         repo_name: data.project_name,
         repo_url: repoUrl,
-        system_health: data.health_score,
+        system_health: data.health_score ?? 0,
         total_files: data.nodes.length,
         project_root: data.project_root,
     }
