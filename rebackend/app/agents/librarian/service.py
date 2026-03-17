@@ -174,7 +174,7 @@ class LibrarianService:
             return f"# Error reading file: {e}"
 
     def get_commit_history(self, input_source: str, max_count: int = 15) -> List[CommitInfo]:
-        """Fetch recent commits from the local clone."""
+        """Fetch recent commits from the local clone, unshallowing first if needed."""
         if input_source.startswith("http"):
             repo_name = input_source.rstrip("/").split("/")[-1].replace(".git", "")
             repo_path = os.path.join(settings.REPO_STORAGE_PATH, repo_name)
@@ -187,6 +187,25 @@ class LibrarianService:
         try:
             print(f"[Librarian:History] Fetching {max_count} commits from {repo_path}")
             repo = Repo(repo_path, search_parent_directories=True)
+
+            # If the clone was done with depth=1 (shallow), unshallow it so we
+            # can see the full commit history.
+            shallow_file = os.path.join(repo_path, ".git", "shallow")
+            if os.path.exists(shallow_file):
+                print("[Librarian:History] Shallow clone detected — unshallowing for full history...")
+                try:
+                    repo.git.fetch("--unshallow")
+                    print("[Librarian:History] Unshallow complete.")
+                except Exception as ue:
+                    print(f"[Librarian:History] Unshallow failed (may already be full): {ue}")
+            else:
+                # Pull latest commits even if not shallow
+                try:
+                    repo.remotes.origin.pull()
+                    print("[Librarian:History] Pulled latest commits.")
+                except Exception as pe:
+                    print(f"[Librarian:History] Pull failed (using existing): {pe}")
+
             result = []
             for c in repo.iter_commits(max_count=max_count):
                 msg = c.message.strip().split("\n")[0]

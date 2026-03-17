@@ -39,14 +39,31 @@ export function HealthPanel({ onClose }: { onClose: () => void }) {
   const [isSyncing, setIsSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState<GithubSyncResult | null>(null)
 
-  // Fetch history when a live repo is active
-  const fetchHistory = useCallback(() => {
-    if (isLive && graphMeta?.repo_url) {
-      setIsLoadingHistory(true)
-      getHistory(graphMeta.repo_url)
-        .then(setHistory)
-        .catch((err) => console.error("Failed to fetch history:", err))
-        .finally(() => setIsLoadingHistory(false))
+  // Auto-sync on mount (gets latest commits + PRs from GitHub API)
+  // Falls back to getHistory (local git log) for non-GitHub repos
+  const fetchHistory = useCallback(async () => {
+    if (!isLive || !graphMeta?.repo_url) return
+    setIsLoadingHistory(true)
+    try {
+      if (graphMeta.repo_url.startsWith("http")) {
+        // Live GitHub repo: sync from GitHub API for up-to-date history
+        const result = await syncGithub(graphMeta.repo_url)
+        setSyncResult(result)
+        setHistory(result.commits)
+      } else {
+        // Local path: fall back to local git log
+        const commits = await getHistory(graphMeta.repo_url)
+        setHistory(commits)
+      }
+    } catch (err) {
+      console.error("Failed to fetch history:", err)
+      // Last-ditch fallback: local log
+      try {
+        const commits = await getHistory(graphMeta.repo_url)
+        setHistory(commits)
+      } catch { /* silent */ }
+    } finally {
+      setIsLoadingHistory(false)
     }
   }, [isLive, graphMeta?.repo_url])
 
