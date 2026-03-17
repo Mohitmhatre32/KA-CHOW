@@ -238,9 +238,9 @@ function FileSelectorPanel({
                             >
                                 <FileCode className="h-3 w-3 shrink-0 text-zinc-500" />
                                 <span className="truncate">{node.id}</span>
-                                {node.sonar_health?.bugs > 0 && (
+                                {((node.sonar_health?.bugs as number) ?? 0) > 0 && (
                                     <span className="ml-auto rounded-full bg-rose-500/20 px-1.5 py-0.5 text-[9px] text-rose-400">
-                                        {node.sonar_health.bugs} bug{node.sonar_health.bugs !== 1 ? "s" : ""}
+                                        {node.sonar_health?.bugs} bug{node.sonar_health?.bugs !== 1 ? "s" : ""}
                                     </span>
                                 )}
                             </button>
