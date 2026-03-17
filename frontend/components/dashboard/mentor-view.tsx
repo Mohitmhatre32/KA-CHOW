@@ -332,7 +332,7 @@ export function MentorView() {
                 <div className="flex flex-col gap-6">
 
                     {/* Quest Card */}
-                    <div
+                    {/* <div
                         className="rounded-2xl border border-warning/30 bg-warning/5 p-5 backdrop-blur-sm shadow-[inset_0_0_40px_rgba(var(--warning),0.05)]"
                     >
                         <div className="mb-4 flex items-center gap-2">
@@ -384,7 +384,7 @@ export function MentorView() {
                         ) : (
                             <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground opacity-60">No quest available.</div>
                         )}
-                    </div>
+                    </div> */}
 
                     {/* Onboarding Checklist */}
                     <div className="flex flex-1 flex-col rounded-2xl border border-border bg-card/30 p-5 backdrop-blur-md">

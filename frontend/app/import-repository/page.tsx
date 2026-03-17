@@ -163,9 +163,6 @@ export default function ImportRepositoryPage() {
               <GitBranch className="h-6 w-6 text-primary" />
             </div>
             <CardTitle className="text-2xl italic">Import Your Repository</CardTitle>
-            <CardDescription>
-              {githubToken ? "Select a repository to analyze codebase architecture" : "Connect with GitHub to seamlessly import your repositories"}
-            </CardDescription>
           </CardHeader>
 
           <CardContent>
@@ -180,17 +177,17 @@ export default function ImportRepositoryPage() {
           {!githubToken ? (
             // Not Authenticated View
             <div className="flex flex-col items-center justify-center py-6 gap-8">
-              <Button
+              {/* <Button
                 onClick={handleConnectGithub}
                 disabled={!clientId}
                 className="w-full sm:w-auto h-12 px-8 bg-foreground text-background hover:bg-foreground/90 font-semibold"
               >
                 <Github className="mr-2 h-5 w-5" />
                 Connect with GitHub
-              </Button>
+              </Button> */}
 
               <div className="flex w-full items-center gap-4 text-xs text-muted-foreground/60 uppercase tracking-widest before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border">
-                or use public URL
+                Use a public GitHub URL
               </div>
 
               <form onSubmit={handleSubmit} className="w-full flex gap-3 flex-col sm:flex-row">
