@@ -441,12 +441,12 @@ export function GraphView() {
         className={`h-full w-full transition-all duration-1000 ease-out transform ${mounted ? "opacity-100 scale-100" : "opacity-0 scale-95"} ${isPanning ? "cursor-grabbing" : "cursor-grab"}`}
       >
         <defs>
-          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="var(--border)" strokeWidth="0.3" strokeOpacity="0.5" />
+          <pattern id="dotGrid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <circle cx="2" cy="2" r="1.5" fill="var(--border)" opacity="0.4" />
           </pattern>
         </defs>
 
-        <rect x={viewBox.x - 1000} y={viewBox.y - 1000} width={viewBox.w + 2000} height={viewBox.h + 2000} fill="url(#grid)" />
+        <rect x={viewBox.x - 1000} y={viewBox.y - 1000} width={viewBox.w + 2000} height={viewBox.h + 2000} fill="url(#dotGrid)" />
 
         {/* Edges */}
         {edges.map((edge, i) => {
@@ -454,14 +454,21 @@ export function GraphView() {
           const isConnectedToActive = activeNodeId === edge.fromId || activeNodeId === edge.toId
           const isDimmed = activeNodeId !== null && !isConnectedToActive
 
+          // Curved path logic for a more organic/cyber topology look
+          const dx = edge.x2 - edge.x1
+          const dy = edge.y2 - edge.y1
+          const dr = Math.sqrt(dx * dx + dy * dy) * 1.5 // Curve radius
+
           return (
-            <line
-              key={i} x1={edge.x1} y1={edge.y1} x2={edge.x2} y2={edge.y2}
-              stroke={isConnectedToSelected ? "#3b82f6" : "#ffffff"}
-              strokeWidth={isConnectedToSelected ? 3 : 1.5}
-              strokeOpacity={isDimmed ? 0.1 : (isConnectedToSelected ? 1 : 0.6)}
-              strokeDasharray="4 4"
-              className={`${isConnectedToSelected ? 'drop-shadow-[0_0_10px_rgba(59,130,246,1)]' : ''} transition-all duration-300`}
+            <path
+              key={i}
+              d={`M${edge.x1},${edge.y1}A${dr},${dr} 0 0,1 ${edge.x2},${edge.y2}`}
+              fill="none"
+              stroke={isConnectedToSelected ? "var(--primary)" : "var(--muted-foreground)"}
+              strokeWidth={isConnectedToSelected ? 2.5 : 1}
+              strokeOpacity={isDimmed ? 0.05 : (isConnectedToSelected ? 0.9 : 0.25)}
+              strokeDasharray={isConnectedToSelected ? "4 6" : "none"}
+              className={`${isConnectedToSelected ? 'drop-shadow-[0_0_8px_var(--primary)] animated-edge' : ''} transition-all duration-500`}
             />
           )
         })}
@@ -524,7 +531,7 @@ export function GraphView() {
               <foreignObject x={-9} y={-9} width={18} height={18} className="pointer-events-none">
                 <IconComponent style={{ color: typeColors[node.type] }} size={18} />
               </foreignObject>
-              <text y={34} textAnchor="middle" fill="var(--foreground)" fontSize="10" fontWeight="600" className="select-none pointer-events-none transition-colors opacity-70 group-hover:opacity-100">
+              <text y={36} textAnchor="middle" fill="var(--foreground)" fontSize="10" className="font-mono select-none pointer-events-none transition-colors opacity-70 group-hover:opacity-100 tracking-wider">
                 {node.label}
               </text>
             </g>

@@ -65,19 +65,19 @@ export const Features = ({ scrollProgress }: FeaturesProps) => {
         >
             <div className="max-w-7xl mx-auto relative z-10">
                 {/* Section header */}
-                <div className="text-center mb-16 space-y-4">
-                    <div className="flex justify-center">
-                        <span className="badge">
-                            Features
-                        </span>
+                <div className="text-center mb-24 space-y-6">
+                    <div className="inline-block bg-secondary text-secondary-foreground border-4 border-border font-mono text-sm font-bold uppercase tracking-widest px-8 py-3 shadow-[var(--shadow-brutal-primary)] transform -rotate-2">
+                        Features
                     </div>
 
-                    <h2 className="text-4xl md:text-5xl tracking-tight font-medium text-foreground">
-                        Engineering Intelligence
+                    <h2 className="text-6xl md:text-8xl tracking-tighter font-black text-foreground uppercase drop-shadow-[var(--shadow-brutal-secondary)]">
+                        ENGINEERING<br/>INTELLIGENCE
                     </h2>
-                    <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                        Transform how you understand and build software with AI-powered insights. Deeply integrated tools for the modern developer.
-                    </p>
+                    <div className="bg-card border-4 border-border p-4 shadow-[var(--shadow-brutal-sm)] max-w-2xl mx-auto transform translate-y-4 rotate-1">
+                        <p className="text-xl font-medium text-foreground uppercase uppercase tracking-tight">
+                            Transform how you understand and build software with AI-powered insights. Deeply integrated tools for the modern developer.
+                        </p>
+                    </div>
                 </div>
 
                 {/* Feature cards */}
@@ -93,79 +93,57 @@ export const Features = ({ scrollProgress }: FeaturesProps) => {
                                 key={index}
                                 onMouseEnter={() => setHoveredCard(index)}
                                 onMouseLeave={() => setHoveredCard(null)}
-                                className={`group relative rounded-xl p-8 border bg-card/50 transition-all duration-400
-                                ${hoveredCard === index ? "border-primary/50 bg-primary/[0.02]" : "border-border"}`}
+                                className={`group relative p-8 border-4 transition-all duration-300
+                                ${hoveredCard === index ? "bg-primary text-primary-foreground border-border shadow-none translate-y-[4px] translate-x-[4px]" : "bg-card text-card-foreground border-border shadow-[var(--shadow-brutal)]"}`}
                                 style={{
                                     opacity: featureOpacity,
-                                    transform: `translateY(${(1 - featureOpacity) * 20}px)`,
-                                    transitionDelay: `${index * 100}ms`,
+                                    transform: isVisible && hoveredCard !== index ? `translateY(0px)` : undefined,
+                                    transitionDelay: `${index * 50}ms`,
                                 }}
                             >
                                 <div
-                                    className={`relative w-12 h-12 rounded-lg border flex items-center justify-center mb-6 transition-all duration-300
-                                    ${hoveredCard === index ? "border-primary bg-primary/20" : "border-border bg-muted/30"}`}
+                                    className={`relative w-16 h-16 border-2 flex items-center justify-center mb-6 transition-all duration-300
+                                    ${hoveredCard === index ? "border-border bg-border" : "border-border bg-primary"}`}
                                 >
                                     <Icon
-                                        className="w-7 h-7 transition-transform duration-300 group-hover:scale-125"
-                                        style={{ color: "var(--primary)" }}
+                                        className="w-8 h-8 transition-transform duration-300 group-hover:scale-110"
+                                        style={{ color: hoveredCard === index ? "var(--primary)" : "var(--primary-foreground)" }}
                                     />
                                 </div>
 
-                                <h3
-                                    className="text-2xl font-semibold mb-3 transition-all duration-300"
-                                    style={{ color: hoveredCard === index ? "var(--primary)" : "var(--foreground)" }}
-                                >
+                                <h3 className="text-3xl font-bold uppercase tracking-tight mb-4 border-b-4 border-transparent group-hover:border-border pb-2 inline-block">
                                     {feature.title}
                                 </h3>
 
-                                <p className="leading-relaxed transition-colors duration-300"
-                                    style={{ color: hoveredCard === index ? "var(--secondary-foreground)" : "var(--muted-foreground)" }}
-                                >
+                                <p className="text-lg leading-snug font-medium opacity-90">
                                     {feature.description}
                                 </p>
-
-                                <div className="mt-6 pt-6 border-t opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                                    style={{ borderColor: "rgba(255,255,255,0.08)" }}
-                                >
-                                    <span
-                                        className="inline-flex items-center gap-2 font-medium hover:gap-3 transition-all duration-300 cursor-pointer"
-                                        style={{ color: "var(--primary)" }}
-                                    >
-                                        Learn more
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                        </svg>
-                                    </span>
-                                </div>
                             </div>
                         );
                     })}
                 </div>
 
                 {/* Bottom CTA */}
-                <div className="text-center">
+                <div className="text-center mt-24">
                     <Button
                         size="lg"
-                        className={`h-14 px-10 text-lg transition-all duration-500
+                        variant="secondary"
+                        className={`h-20 px-16 text-2xl font-black uppercase tracking-widest transition-all duration-500 border-4 border-border shadow-[var(--shadow-brutal-primary)] hover:bg-primary hover:text-primary-foreground
                         ${scrollProgress > 0.7 ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"}`}
                         onClick={() => router.push("/import-repository")}
                         style={{ pointerEvents: scrollProgress > 0.7 ? "auto" : "none" }}
                     >
-                        Launch Now
-                        <ArrowRight className="ml-2 h-5 w-5" />
+                        LAUNCH NOW
+                        <ArrowRight className="ml-4 h-8 w-8" />
                     </Button>
                 </div>
             </div>
 
-            {/* Background glow orbs */}
+            {/* Background geometric forms (Replacing blurred orbs) */}
             <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
-                <div className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full blur-[150px] opacity-5 animate-pulse"
-                    style={{ background: "var(--primary)" }}
-                />
-                <div className="absolute bottom-1/4 right-1/4 w-96 h-96 rounded-full blur-[150px] opacity-5 animate-pulse"
-                    style={{ background: "var(--primary)", animationDelay: "1s" }}
-                />
-                <div className="absolute top-1/2 right-1/3 w-64 h-64 bg-blue-500 rounded-full blur-[100px] opacity-[0.03]" />
+                <div className="absolute top-1/4 left-1/4 w-96 h-96 border-[16px] border-primary/20 rotate-45" />
+                <div className="absolute bottom-1/4 right-1/4 w-64 h-64 border-[16px] border-secondary/20 rotate-12" />
+                <div className="absolute top-1/2 right-1/3 w-80 h-80 border-[16px] border-accent/20 -rotate-12" />
             </div>
         </section>
     );
