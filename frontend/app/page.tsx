@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { ParticleSystem } from "@/components/landing/ParticleSystem"
+
 import { Hero } from "@/components/landing/Hero"
 import { Features } from "@/components/landing/Features"
 import { Footer } from "@/components/landing/Footer"
@@ -51,9 +51,6 @@ export default function LandingPage() {
           backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
         }}
       />
-
-      {/* Particle system (Maintains dynamic feel but background is now #030303 from theme) */}
-      <ParticleSystem scrollProgress={scrollProgress} />
 
       {/* Page sections */}
       <div className="relative">
