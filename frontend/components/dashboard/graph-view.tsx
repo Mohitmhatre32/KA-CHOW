@@ -14,11 +14,13 @@ import {
   generateIndustryDocs, 
   incrementalUpdate, 
   triggerSonarScan,
+  analyzeRepository,
   getRepoTasks,
   type DocumentationResponse, 
   type IncrementalUpdateResult,
   type RepoTask,
 } from "@/lib/api"
+
 import { getActiveRepo } from "@/lib/repo-store"
 import { Button } from "@/components/ui/button"
 import { DocsModal } from "./docs-modal"
@@ -370,8 +372,9 @@ export function GraphView() {
     }
 
     setIsScanning(true)
-    const toastId = toast.loading("Running deep SonarQube scan... (this take a minute)")
-    try {
+    const toastId = toast.loading("Running deep SonarQube scan…")
+
+    const runScan = async () => {
       const res = await triggerSonarScan(activeRepo.repo_url)
       if (res.status === "success") {
         toast.success(res.message, { id: toastId })
@@ -379,9 +382,46 @@ export function GraphView() {
       } else {
         toast.error(res.message, { id: toastId })
       }
-    } catch (err) {
-      console.error("Sonar Scan Failed:", err)
-      toast.error("SonarQube scan failed. Check if Docker is running.", { id: toastId })
+    }
+
+    try {
+      await runScan()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+
+      // "Repository not found locally" — backend doesn’t have a clone yet.
+      // Auto-process the repo first, then retry the scan.
+      const needsProcess =
+        msg.includes("Repository not found locally") ||
+        msg.includes("Project path not found") ||
+        msg.includes("not found locally")
+
+      if (needsProcess) {
+        toast.loading(
+          "Repository not yet indexed — cloning & scanning first…",
+          { id: toastId }
+        )
+        try {
+          await analyzeRepository(activeRepo.repo_url)
+          toast.loading("Clone complete — running SonarQube…", { id: toastId })
+          await runScan()
+        } catch (processErr: unknown) {
+          const detail = processErr instanceof Error ? processErr.message : String(processErr)
+          console.error("Auto-process before Sonar Scan failed:", detail)
+          toast.error(
+            `Could not index repository: ${detail}`,
+            { id: toastId }
+          )
+        }
+      } else {
+        console.error("Sonar Scan Failed:", msg)
+        toast.error(
+          msg.includes("Docker") || msg.includes("SonarScanner")
+            ? "SonarQube scan failed. Is Docker running and SonarQube configured?"
+            : `Sonar scan failed: ${msg}`,
+          { id: toastId }
+        )
+      }
     } finally {
       setIsScanning(false)
     }

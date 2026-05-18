@@ -45,6 +45,8 @@ import { AlertsInbox } from "@/components/dashboard/alerts-inbox"
 
 // Utilities
 import { getActiveRepo, setActiveRepoId, getAllRepos, upsertRepo } from "@/lib/repo-store"
+// Neo-brutalist skeleton loader
+import { SkeletonDashboardLoader } from "@/components/ui/bone"
 
 type MainView = "graph" | "guardian" | "architect" | "mentor" | "diagram"
 type PanelType = "health" | null
@@ -74,12 +76,11 @@ export default function DashboardPage() {
     setActiveRepoName(repo?.repo_name ?? null)
     setActiveRepoUrl(repo?.repo_url ?? null)
     setActiveRepoBranch(repo?.data.branch ?? "main")
-    
     setLoadRepoUrl(repo?.repo_url ?? "")
     setLoadBranch(repo?.data.branch ?? "main")
-
-    setMainView("graph")
-    setActivePanel(null)
+    // Note: we intentionally do NOT reset mainView or activePanel here.
+    // Each mounted view handles its own cleanup via the active-repo-changed event,
+    // so the user stays on whichever tab they were on when they switched repos.
   }, [])
 
   useEffect(() => {
@@ -149,8 +150,11 @@ export default function DashboardPage() {
     }
   }
 
+  // Show neo-brutalist skeleton until client-side mount + repo hydration completes
+  if (!mounted) return <SkeletonDashboardLoader />
+
   return (
-    <div className={`flex h-screen flex-col bg-background transition-opacity duration-700 ${mounted ? "opacity-100" : "opacity-0"}`}>
+    <div className="flex h-screen flex-col bg-background">
       {/* ─── TOP BAR ─── */}
       <header className="flex h-12 shrink-0 items-center justify-between border-b border-border px-4 bg-card/30 backdrop-blur-sm z-20">
         <div className="flex items-center gap-4">
@@ -314,26 +318,71 @@ export default function DashboardPage() {
         {/* ─── MAIN CANVAS AREA ─── */}
         <ResizablePanel defaultSize={80} className="flex flex-col overflow-hidden">
           <div className="flex-1 overflow-hidden relative">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(88,166,255,0.03),transparent_70%)] pointer-events-none" />
-            {mainView === "guardian" ? (
-              <div className="animate-in fade-in slide-in-from-bottom-2 h-full duration-300">
-                <GuardianView />
-              </div>
-            ) : mainView === "mentor" ? (
-              <div className="animate-in fade-in slide-in-from-bottom-2 h-full duration-300">
-                <MentorView />
-              </div>
-            ) : mainView === "architect" ? (
-              <div className="animate-in fade-in slide-in-from-bottom-2 h-full duration-300">
-                <ArchitectView />
-              </div>
-            ) : mainView === "diagram" ? (
-              <div className="animate-in fade-in slide-in-from-bottom-2 h-full duration-300">
-                <DiagramView />
-              </div>
-            ) : (
+            {/* ── Keep-alive view container ──────────────────────────────────────
+                All views are always mounted so tab switches never destroy state.
+                The active view is shown via CSS; inactive ones are hidden but
+                remain in the DOM (and React tree), preserving all component state:
+                chat history, scaffold results, loaded files, diagram code, etc.
+            ────────────────────────────────────────────────────────────────── */}
+            <div
+              data-view="guardian"
+              className="absolute inset-0 transition-opacity duration-300"
+              style={{
+                opacity: mainView === "guardian" ? 1 : 0,
+                pointerEvents: mainView === "guardian" ? "auto" : "none",
+                zIndex: mainView === "guardian" ? 1 : 0,
+              }}
+            >
+              <GuardianView />
+            </div>
+
+            <div
+              data-view="mentor"
+              className="absolute inset-0 transition-opacity duration-300"
+              style={{
+                opacity: mainView === "mentor" ? 1 : 0,
+                pointerEvents: mainView === "mentor" ? "auto" : "none",
+                zIndex: mainView === "mentor" ? 1 : 0,
+              }}
+            >
+              <MentorView />
+            </div>
+
+            <div
+              data-view="architect"
+              className="absolute inset-0 transition-opacity duration-300"
+              style={{
+                opacity: mainView === "architect" ? 1 : 0,
+                pointerEvents: mainView === "architect" ? "auto" : "none",
+                zIndex: mainView === "architect" ? 1 : 0,
+              }}
+            >
+              <ArchitectView />
+            </div>
+
+            <div
+              data-view="diagram"
+              className="absolute inset-0 transition-opacity duration-300"
+              style={{
+                opacity: mainView === "diagram" ? 1 : 0,
+                pointerEvents: mainView === "diagram" ? "auto" : "none",
+                zIndex: mainView === "diagram" ? 1 : 0,
+              }}
+            >
+              <DiagramView />
+            </div>
+
+            <div
+              data-view="graph"
+              className="absolute inset-0 transition-opacity duration-300"
+              style={{
+                opacity: mainView === "graph" ? 1 : 0,
+                pointerEvents: mainView === "graph" ? "auto" : "none",
+                zIndex: mainView === "graph" ? 1 : 0,
+              }}
+            >
               <GraphView />
-            )}
+            </div>
           </div>
         </ResizablePanel>
 

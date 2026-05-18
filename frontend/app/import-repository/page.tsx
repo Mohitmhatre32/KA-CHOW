@@ -17,8 +17,6 @@ const ANALYSIS_STEPS = [
   "Finalizing insights...",
 ]
 
-const STEP_INTERVAL_MS = 2800
-
 export default function ImportRepositoryPage() {
   const router = useRouter()
 
@@ -50,30 +48,40 @@ export default function ImportRepositoryPage() {
 
     const finalUrl = selectedRepoUrl.trim()
 
-    const PENULTIMATE = ANALYSIS_STEPS.length - 2
+    // Bug #8 fix: drive progress from real API lifecycle, not fake timers.
+    // Show steps 0→3 as "in progress" animations while the backend works.
+    // When the API resolves, jump directly to the final completed state.
+    // This eliminates the race condition where fake timers could show "done"
+    // before the backend actually finished, or vice versa.
+    const TOTAL = ANALYSIS_STEPS.length // 5
+    // Animate steps 0..TOTAL-2 forward every 2s so the user sees movement,
+    // but cap at the penultimate step — the last step is reserved for actual completion.
+    const PENULTIMATE = TOTAL - 2
     intervalRef.current = setInterval(() => {
       setCurrentStep((prev) => {
         if (prev >= PENULTIMATE) {
           clearInterval(intervalRef.current!)
+          intervalRef.current = null
           return prev
         }
         return prev + 1
       })
-    }, STEP_INTERVAL_MS)
+    }, 2800)
 
     try {
       const data = await analyzeRepository(finalUrl, branch.trim() || "main")
 
-      if (intervalRef.current) clearInterval(intervalRef.current)
-      setCurrentStep(ANALYSIS_STEPS.length - 1)
+      // API succeeded — stop fake progress and jump to final step
+      if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null }
+      setCurrentStep(TOTAL - 1)
 
-      const storeUrl = selectedRepoUrl.trim()
-      const newId = upsertRepo(storeUrl, data)
+      const newId = upsertRepo(finalUrl, data)
       setActiveRepoId(newId)
 
+      // Brief pause so user sees the "complete" state, then navigate
       setTimeout(() => router.push(`/dashboard/${newId}`), 600)
     } catch (err) {
-      if (intervalRef.current) clearInterval(intervalRef.current)
+      if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null }
       setIsLoading(false)
       setCurrentStep(0)
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.")
