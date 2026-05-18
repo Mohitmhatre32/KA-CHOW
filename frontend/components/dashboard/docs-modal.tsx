@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button"
 import { Copy, Download, FileText, Check, Loader2, Sparkles } from "lucide-react"
 import { toast } from "sonner"
 import { DocumentationResponse } from "@/lib/api"
+import { Bone, SkeletonText } from "@/components/ui/bone"
 
 interface DocsModalProps {
     isOpen: boolean
@@ -56,7 +57,7 @@ export function DocsModal({
             <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden bg-card border-border">
                 <DialogHeader className="p-6 pb-2 border-b border-border bg-muted/30">
                     <div className="flex items-center gap-2 mb-1">
-                        <Sparkles className="h-5 w-5 text-primary animate-pulse" />
+                        <Sparkles className="h-5 w-5 text-primary" />
                         <DialogTitle className="text-xl font-bold tracking-tight">AI Documentation Generator</DialogTitle>
                     </div>
                     <DialogDescription className="text-muted-foreground">
@@ -66,11 +67,24 @@ export function DocsModal({
 
                 <div className="flex-1 overflow-hidden flex flex-col bg-background/50">
                     {isLoading ? (
-                        <div className="flex flex-col items-center justify-center p-20 gap-4">
-                            <Loader2 className="h-10 w-10 animate-spin text-primary" />
-                            <div className="text-center space-y-1">
-                                <p className="font-medium text-foreground">Generating Industry Guide...</p>
-                                <p className="text-sm text-muted-foreground lowercase">Analyzing dependencies and tech stack</p>
+                        <div className="flex flex-col p-8 gap-8 animate-in fade-in duration-500">
+                            <div className="flex items-center gap-4 border-b-2 border-zinc-600 pb-6 mb-2">
+                                <div className="bone-stamp flex items-center justify-center bg-zinc-800 border-2 border-zinc-600 shadow-[3px_3px_0_#000]" style={{ width: 48, height: 48 }}>
+                                    <Sparkles className="h-5 w-5 text-zinc-400" />
+                                </div>
+                                <div className="flex flex-col gap-2 flex-1">
+                                    <Bone height={20} width="35%" delay={0} />
+                                    <Bone height={12} width="55%" delay={50} />
+                                </div>
+                            </div>
+                            <div className="flex flex-col gap-6 px-2">
+                                <SkeletonText lines={5} height={12} gap={12} className="opacity-80" />
+                                <div className="h-2 w-full max-w-[200px] border-b-2 border-dashed border-zinc-700 my-2" />
+                                <SkeletonText lines={3} height={12} gap={12} className="opacity-80" />
+                                <div className="flex gap-4 mt-6">
+                                    <Bone height={40} width={140} delay={100} style={{ border: '2px solid #52525b', boxShadow: '4px 4px 0 #000' }} />
+                                    <Bone height={40} width={140} delay={150} style={{ border: '2px solid #52525b', boxShadow: '4px 4px 0 #000' }} />
+                                </div>
                             </div>
                         </div>
                     ) : docs ? (

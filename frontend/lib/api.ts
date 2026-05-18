@@ -103,6 +103,20 @@ export async function getIndexedRepos(): Promise<string[]> {
   return data.repos
 }
 
+/**
+ * Deletes a repository from the backend.
+ * Endpoint: DELETE /api/librarian/repo
+ */
+export async function deleteRepository(repoName: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/librarian/repo?repo_name=${encodeURIComponent(repoName)}`, {
+    method: "DELETE",
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(error.detail || `Request failed: ${res.status}`)
+  }
+}
+
 
 /**
  * Clones/processes a repository and builds its knowledge graph.

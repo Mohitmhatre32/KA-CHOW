@@ -757,13 +757,16 @@ export function ArchitectView() {
                                 <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-wider text-zinc-600">
                                     Target File / Endpoint (Optional)
                                 </label>
-                                <input
-                                    type="text"
+                                <select
                                     value={targetFile}
                                     onChange={(e) => setTargetFile(e.target.value)}
                                     className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5 font-mono text-xs text-zinc-300 outline-none transition-colors focus:border-cyan-500/40"
-                                    placeholder="e.g. app/main.py"
-                                />
+                                >
+                                    <option value="">-- Select a File (Optional) --</option>
+                                    {activeRepo?.data?.nodes?.filter(n => n.type === "file").sort((a, b) => a.id.localeCompare(b.id)).map(n => (
+                                        <option key={n.id} value={n.id}>{n.id}</option>
+                                    ))}
+                                </select>
                             </div>
 
                             {/* Proposed Change Scenario */}

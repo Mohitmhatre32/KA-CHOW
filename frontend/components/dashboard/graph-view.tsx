@@ -378,7 +378,7 @@ export function GraphView() {
       const res = await triggerSonarScan(activeRepo.repo_url)
       if (res.status === "success") {
         toast.success(res.message, { id: toastId })
-        refresh() // Reload graph to show new health dots
+        await refresh(true) // Reload graph silently to show new health dots without triggering 'isRefreshing' overlay
       } else {
         toast.error(res.message, { id: toastId })
       }
@@ -427,102 +427,152 @@ export function GraphView() {
     }
   }
 
+  // Mutual exclusion — any operation running locks all buttons
+  const isBusy = isRefreshing || isGeneratingDocs || isIncremental || isScanning
+
   return (
-    <div className="relative h-full w-full overflow-hidden rounded-lg bg-background">
+    <div className="flex flex-col h-full w-full rounded-none bg-[#09090b] overflow-hidden border-2 border-zinc-600 shadow-[4px_4px_0_#000]">
 
-      {/* 1. RESTORED: Top Left Live Status Badge */}
-      {isLive && graphMeta && (
-        <div className="absolute left-4 top-4 z-10 flex items-center gap-2 rounded-lg border border-border bg-card/90 px-3 py-1.5 backdrop-blur-sm transition-all duration-500 animate-in fade-in slide-in-from-top-2">
-          <Activity className="h-3.5 w-3.5 text-success" />
-          <span className="font-mono text-xs text-foreground font-semibold">{graphMeta.repo_name}</span>
-          <div className="flex items-center gap-2">
-            <span className="rounded bg-secondary px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground border border-border/50">
-              {graphMeta.total_files} nodes
+      {/* ── Graph Toolbar ── */}
+      <div className="flex shrink-0 items-center h-12 border-b-2 border-zinc-600 bg-[#18181b] px-4 gap-3">
+
+        {/* Left: stats — read-only context */}
+        {isLive && graphMeta ? (
+          <div className="flex items-center gap-2 min-w-0">
+            <Activity className="h-3 w-3 text-success shrink-0" />
+            <span className="font-mono text-xs font-semibold text-foreground truncate">{graphMeta.repo_name}</span>
+            <div className="h-3 w-px bg-border" />
+            <span className="font-mono text-[10px] text-muted-foreground whitespace-nowrap">{graphMeta.total_files} nodes</span>
+            <span className={`font-mono text-[10px] font-bold whitespace-nowrap ${
+              (graphMeta.system_health ?? 0) >= 80 ? "text-success" :
+              (graphMeta.system_health ?? 0) >= 50 ? "text-warning" : "text-destructive"
+            }`}>
+              {(graphMeta.system_health ?? 0).toFixed(0)}% health
             </span>
-            <span className={`rounded px-1.5 py-0.5 font-mono text-[10px] border ${(graphMeta.system_health ?? 0) >= 80 ? "bg-success/10 text-success border-success/30" :
-              (graphMeta.system_health ?? 0) >= 50 ? "bg-warning/10 text-warning border-warning/30" :
-                "bg-destructive/10 text-destructive border-destructive/30"
-              }`}>
-              {(graphMeta.system_health ?? 0).toFixed(0)}% Health
-            </span>
-
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                refresh();
-              }}
-              disabled={isRefreshing}
-              className="flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[10px] border border-primary/30 bg-primary/10 text-primary transition-all hover:bg-primary/20 disabled:opacity-50"
-              title="Refresh repository analysis"
-            >
-              <RefreshCcw className={`h-2.5 w-2.5 ${isRefreshing ? "animate-spin" : ""}`} />
-              {isRefreshing ? "Scanning..." : "Refresh"}
-            </button>
-
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleGenerateDocs();
-              }}
-              disabled={isGeneratingDocs}
-              className="flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[10px] border border-success/30 bg-success/10 text-success transition-all hover:bg-success/20 disabled:opacity-50"
-              title="Generate README & PRD"
-            >
-              <Sparkles className={`h-2.5 w-2.5 ${isGeneratingDocs ? "animate-pulse" : ""}`} />
-              {isGeneratingDocs ? "Generating..." : "Generate Docs"}
-            </button>
-
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleIncrementalUpdate();
-              }}
-              disabled={isIncremental}
-              className="flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[10px] border border-amber-500/30 bg-amber-500/10 text-amber-400 transition-all hover:bg-amber-500/20 disabled:opacity-50"
-              title="Re-index only changed files (git diff)"
-            >
-              <Zap className={`h-2.5 w-2.5 ${isIncremental ? "animate-pulse" : ""}`} />
-              {isIncremental ? "Updating..." : "⚡ Incremental"}
-            </button>
-
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleSonarScan();
-              }}
-              disabled={isScanning}
-              className="flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[10px] border border-blue-500/30 bg-blue-500/10 text-blue-400 transition-all hover:bg-blue-500/20 disabled:opacity-50"
-              title="Run deep SonarQube quality audit"
-            >
-              <Search className={`h-2.5 w-2.5 ${isScanning ? "animate-spin" : ""}`} />
-              {isScanning ? "Scanning..." : "🔍 Sonar Scan"}
-            </button>
-
-          </div>
-          {/* Benchmark result pill */}
-          {incrementalResult && (
-            <div className="mt-1 flex items-center gap-1.5 rounded bg-amber-500/10 border border-amber-500/20 px-2 py-0.5">
-              <Zap className="h-2.5 w-2.5 text-amber-400" />
-              <span className="font-mono text-[9px] text-amber-400">
-                {incrementalResult.graph_updated
-                  ? `Updated ${incrementalResult.changed_files.length} file(s) in ${incrementalResult.update_time_seconds}s · Baseline ~${incrementalResult.full_scan_baseline_seconds}s`
-                  : "Already up to date"}
+            {incrementalResult && (
+              <span className="font-mono text-[9px] text-amber-400 whitespace-nowrap">
+                ⚡ {incrementalResult.graph_updated
+                  ? `${incrementalResult.changed_files.length} file(s) updated in ${incrementalResult.update_time_seconds}s`
+                  : "up to date"}
               </span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 2. RESTORED: Top Right Legend Overlay */}
-      <div className="absolute right-4 top-4 z-10 flex flex-wrap gap-3 rounded-lg border border-border bg-card/90 px-3 py-2 backdrop-blur-sm animate-in fade-in slide-in-from-right-2">
-        {Object.entries(typeLabels).map(([type, label]) => (
-          <div key={type} className="flex items-center gap-1.5">
-            <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: typeColors[type as GraphNode["type"]] }} />
-            <span className="text-[10px] font-bold uppercase tracking-tight text-muted-foreground">{label}</span>
+            )}
           </div>
-        ))}
+        ) : (
+          <span className="font-mono text-[10px] text-muted-foreground">No repository loaded</span>
+        )}
+
+        <div className="flex-1" />
+
+        {/* Right: action buttons — only shown when live */}
+        {isLive && graphMeta && (
+          <div className="flex items-center gap-1.5">
+            {/* Refresh */}
+            <button
+              onClick={(e) => { e.stopPropagation(); refresh() }}
+              disabled={isBusy}
+              title="Re-fetch repository analysis"
+              className={`inline-flex items-center gap-1.5 h-8 rounded-none border-2 px-3 font-mono text-[11px] font-bold uppercase transition-all
+                ${ isRefreshing
+                  ? "border-primary bg-primary/10 text-primary cursor-wait shadow-[2px_2px_0_#000]"
+                  : isBusy
+                  ? "border-zinc-700 bg-zinc-800 text-muted-foreground opacity-40 cursor-not-allowed shadow-[2px_2px_0_#000]"
+                  : "border-zinc-600 bg-zinc-800 text-foreground hover:border-primary hover:bg-primary/10 hover:text-primary active:translate-y-[2px] active:translate-x-[2px] active:shadow-none shadow-[2px_2px_0_#000]"
+                }`}
+            >
+              <RefreshCcw className={`h-3 w-3 ${isRefreshing ? "animate-spin" : ""}`} />
+              {isRefreshing ? "Refreshing" : "Refresh"}
+            </button>
+
+            {/* Generate Docs */}
+            <button
+              onClick={(e) => { e.stopPropagation(); handleGenerateDocs() }}
+              disabled={isBusy}
+              title="Generate PROJECT_GUIDE.md with AI"
+              className={`inline-flex items-center gap-1.5 h-8 rounded-none border-2 px-3 font-mono text-[11px] font-bold uppercase transition-all
+                ${ isGeneratingDocs
+                  ? "border-success bg-success/10 text-success cursor-wait shadow-[2px_2px_0_#000]"
+                  : isBusy
+                  ? "border-zinc-700 bg-zinc-800 text-muted-foreground opacity-40 cursor-not-allowed shadow-[2px_2px_0_#000]"
+                  : "border-zinc-600 bg-zinc-800 text-foreground hover:border-success hover:bg-success/10 hover:text-success active:translate-y-[2px] active:translate-x-[2px] active:shadow-none shadow-[2px_2px_0_#000]"
+                }`}
+            >
+              <Sparkles className="h-3 w-3" />
+              {isGeneratingDocs ? "Generating" : "Docs"}
+            </button>
+
+            {/* Incremental */}
+            <button
+              onClick={(e) => { e.stopPropagation(); handleIncrementalUpdate() }}
+              disabled={isBusy}
+              title="Re-index only changed files (git diff HEAD~1)"
+              className={`inline-flex items-center gap-1.5 h-8 rounded-none border-2 px-3 font-mono text-[11px] font-bold uppercase transition-all
+                ${ isIncremental
+                  ? "border-amber-500 bg-amber-500/10 text-amber-400 cursor-wait shadow-[2px_2px_0_#000]"
+                  : isBusy
+                  ? "border-zinc-700 bg-zinc-800 text-muted-foreground opacity-40 cursor-not-allowed shadow-[2px_2px_0_#000]"
+                  : "border-zinc-600 bg-zinc-800 text-foreground hover:border-amber-500 hover:bg-amber-500/10 hover:text-amber-400 active:translate-y-[2px] active:translate-x-[2px] active:shadow-none shadow-[2px_2px_0_#000]"
+                }`}
+            >
+              <Zap className={`h-3 w-3 ${isIncremental ? "animate-pulse" : ""}`} />
+              {isIncremental ? "Updating" : "Incremental"}
+            </button>
+
+            {/* Sonar Scan */}
+            <button
+              onClick={(e) => { e.stopPropagation(); handleSonarScan() }}
+              disabled={isBusy}
+              title="Run SonarQube quality audit (requires Docker)"
+              className={`inline-flex items-center gap-1.5 h-8 rounded-none border-2 px-3 font-mono text-[11px] font-bold uppercase transition-all
+                ${ isScanning
+                  ? "border-blue-500 bg-blue-500/10 text-blue-400 cursor-wait shadow-[2px_2px_0_#000]"
+                  : isBusy
+                  ? "border-zinc-700 bg-zinc-800 text-muted-foreground opacity-40 cursor-not-allowed shadow-[2px_2px_0_#000]"
+                  : "border-zinc-600 bg-zinc-800 text-foreground hover:border-blue-500 hover:bg-blue-500/10 hover:text-blue-400 active:translate-y-[2px] active:translate-x-[2px] active:shadow-none shadow-[2px_2px_0_#000]"
+                }`}
+            >
+              <Search className={`h-3 w-3 ${isScanning ? "animate-spin" : ""}`} />
+              {isScanning ? "Scanning" : "Sonar"}
+            </button>
+          </div>
+
+        )}
       </div>
 
+      {/* ── Graph Canvas (relative container for overlays) ── */}
+      <div className="relative flex-1 overflow-hidden bg-[#09090b]">
+
+        {/* Busy Overlay (Neo-brutalist loading state) */}
+        {isBusy && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-[#09090b]/80 backdrop-blur-sm animate-in fade-in duration-300">
+            <div className="flex flex-col items-center gap-6">
+              <div className="bone-stamp flex items-center justify-center bg-zinc-800 border-[3px] border-zinc-600 shadow-[5px_5px_0_#000]"
+                style={{ width: 72, height: 72 }}>
+                <span className="text-3xl font-mono text-white">
+                  {isRefreshing ? "↻" : isGeneratingDocs ? "✦" : isIncremental ? "⚡" : "🔍"}
+                </span>
+              </div>
+              <div className="flex flex-col items-center gap-2">
+                <div className="h-3 w-48 bg-zinc-800 border-2 border-zinc-600 shadow-[3px_3px_0_#000] bone-stamp" />
+                <div className="h-2 w-32 bg-zinc-800 border-2 border-zinc-600 shadow-[3px_3px_0_#000] bone-stamp" style={{ animationDelay: '80ms' }} />
+              </div>
+              <div className="flex gap-2 mt-2">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="bone-tick h-2.5 w-2.5 bg-zinc-600 border-2 border-zinc-600" style={{ animationDelay: `${i * 140}ms` }} />
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Legend — top right */}
+        <div className="absolute right-4 top-4 z-10 flex flex-wrap gap-3 rounded-none border-2 border-zinc-600 bg-zinc-900/95 px-3 py-2 shadow-[4px_4px_0_#000] animate-in fade-in slide-in-from-right-2">
+          {Object.entries(typeLabels).map(([type, label]) => (
+            <div key={type} className="flex items-center gap-1.5">
+              <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: typeColors[type as GraphNode["type"]] }} />
+              <span className="text-[10px] font-bold uppercase tracking-tight text-muted-foreground">{label}</span>
+            </div>
+          ))}
+        </div>
 
       <svg
         ref={svgRef}
@@ -733,11 +783,11 @@ export function GraphView() {
 
 
       {/* 3. Interaction Hint Overlay (Bottom Left) */}
-      <div className="absolute bottom-4 left-4 flex flex-col gap-0.5 pointer-events-none">
-        <span className="text-[9px] font-bold text-muted-foreground/60 uppercase tracking-widest">
+      <div className="absolute bottom-4 left-4 flex flex-col gap-1 pointer-events-none p-2 border-2 border-zinc-600 bg-zinc-900/80 shadow-[4px_4px_0_#000] rounded-none animate-in fade-in slide-in-from-bottom-2">
+        <span className="text-[9px] font-bold text-muted-foreground/80 uppercase tracking-widest">
           Left Click: Select Node
         </span>
-        <span className="text-[9px] font-medium text-muted-foreground/40 uppercase tracking-widest">
+        <span className="text-[9px] font-medium text-muted-foreground/60 uppercase tracking-widest">
           Scroll: Zoom · Canvas Drag: Pan
         </span>
       </div>
@@ -749,6 +799,7 @@ export function GraphView() {
         docs={generatedDocs}
         projectName={graphMeta?.repo_name || "Project"}
       />
+      </div>
     </div>
   )
 }

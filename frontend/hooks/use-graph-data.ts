@@ -40,7 +40,7 @@ export interface UseGraphDataReturn {
     isLive: boolean       // false = showing demo data
     isLoading: boolean
     isRefreshing: boolean
-    refresh: () => Promise<void>
+    refresh: (silent?: boolean) => Promise<void>
 }
 
 function buildFromResponse(
@@ -113,11 +113,11 @@ export function useGraphData(): UseGraphDataReturn {
         }
     }
 
-    const refresh = async () => {
+    const refresh = async (silent: boolean = false) => {
         const activeRepo = getActiveRepo()
         if (!activeRepo || isRefreshing) return
 
-        setIsRefreshing(true)
+        if (!silent) setIsRefreshing(true)
         try {
             // 1. Re-fetch from backend (this triggers SonarQube re-scan)
             const { analyzeRepository } = await import("@/lib/api")
@@ -144,7 +144,7 @@ export function useGraphData(): UseGraphDataReturn {
         } catch (err) {
             console.error("Manual refresh failed:", err)
         } finally {
-            setIsRefreshing(false)
+            if (!silent) setIsRefreshing(false)
         }
     }
 
