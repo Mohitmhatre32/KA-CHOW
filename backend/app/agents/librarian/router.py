@@ -35,6 +35,22 @@ async def get_indexed_repos():
                 indexed.append(name)
     return {"repos": indexed}
 
+#added this to api route to connect delete button -- Aditi
+@router.delete("/repo", summary="Delete a repository from backend storage")
+async def delete_repository(repo_name: str = Query(..., description="Name of the repository to delete")):
+    """
+    Deletes the cloned repository and its graph cache from disk.
+    """
+    try:
+        success = librarian.delete_repository(repo_name)
+        if success:
+            return {"message": f"Repository '{repo_name}' deleted successfully."}
+        else:
+            raise HTTPException(status_code=404, detail="Repository not found on backend.")
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/generate-docs", response_model=DocumentationResponse, summary="Generates industry-standard PROJECT_GUIDE.md")
 async def generate_documentation(request: DocumentationRequest):
@@ -172,4 +188,4 @@ async def run_sonar_scan(request: SonarScanRequest):
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))

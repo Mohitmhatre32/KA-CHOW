@@ -91,6 +91,19 @@ class LibrarianService:
     # 
     # PUBLIC API
     # 
+# added the delete functionlity 
+    def delete_repository(self, repo_name: str) -> bool:
+        """
+        Deletes a repository's graph cache from disk.
+        """
+        print(f"\n[Librarian:Delete] Deleting repo: {repo_name}")
+        storage = settings.REPO_STORAGE_PATH
+        repo_dir = os.path.join(storage, repo_name)
+        if os.path.exists(repo_dir):
+            import shutil
+            shutil.rmtree(repo_dir, ignore_errors=True)
+            return True
+        return False
 
     def process_request(self, input_source: str, branch: str = "main", force: bool = False) -> GraphResponse:
         """

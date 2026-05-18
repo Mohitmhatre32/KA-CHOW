@@ -19,7 +19,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { getAllRepos, removeRepo, setActiveRepoId, type RepoEntry } from "@/lib/repo-store"
-import { getIndexedRepos } from "@/lib/api"
+import { getIndexedRepos, deleteRepository } from "@/lib/api"
 import { SkeletonRepoCard, SkeletonButton, Bone } from "@/components/ui/bone"
 
 function timeAgo(isoString: string): string {
@@ -289,9 +289,16 @@ export default function RepositoriesPage() {
     router.push(`/dashboard/${repo.id}`)
   }
 
-  const handleDelete = (id: string) => {
-    removeRepo(id)
-    load()
+  const handleDelete = async (repo: RepoEntry) => {
+    if (window.confirm(`Are you sure you want to permanently delete '${repo.repo_name}'? This will remove all analyzed data from the backend as well.`)) {
+      try {
+        await deleteRepository(repoNameFromEntry(repo))
+      } catch (e) {
+        console.error("Backend deletion failed:", e)
+      }
+      removeRepo(repo.id)
+      load()
+    }
   }
 
   return (
@@ -387,7 +394,7 @@ export default function RepositoriesPage() {
                     key={repo.id}
                     repo={repo}
                     onOpen={() => handleOpen(repo)}
-                    onDelete={() => handleDelete(repo.id)}
+                    onDelete={() => handleDelete(repo)}
                   />
                 ))}
 
