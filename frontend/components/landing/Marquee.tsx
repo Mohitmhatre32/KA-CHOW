@@ -15,9 +15,9 @@ export function Marquee({ children, direction = "left", speed = "normal", classN
       className={cn("w-full overflow-hidden border-y-4 border-border bg-primary/20 flex whitespace-nowrap", className)}
       {...props}
     >
-      <div 
+      <div
         className={cn(
-          "flex items-center space-x-12 px-6 animate-marquee", 
+          "flex items-center space-x-12 px-6 animate-marquee",
           direction === "right" && "animate-marquee-reverse",
           speed === "fast" && "duration-[10000ms]",
           speed === "normal" && "duration-[20000ms]",
@@ -30,12 +30,6 @@ export function Marquee({ children, direction = "left", speed = "normal", classN
         {children}
         {children}
       </div>
-      <style jsx>{`
-        @keyframes marquee { 0% { transform: translateX(0%); } 100% { transform: translateX(-50%); } }
-        @keyframes marquee-reverse { 0% { transform: translateX(-50%); } 100% { transform: translateX(0%); } }
-        .animate-marquee { animation: marquee 20s linear infinite; }
-        .animate-marquee-reverse { animation: marquee-reverse 20s linear infinite; }
-      `}</style>
     </div>
   )
 }

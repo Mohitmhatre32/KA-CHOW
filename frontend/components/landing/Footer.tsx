@@ -2,6 +2,14 @@
 
 import { Github, Linkedin, Twitter, Mail } from "lucide-react";
 
+/**
+ * Footer navigation links.
+ * - Links that correspond to real on-page sections use a hash (#section-id)
+ *   and the matching section must have id="<section-id>" in the DOM.
+ * - Links that are not yet implemented use href="#" with aria-disabled so they
+ *   are accessible but visually indicate they are coming soon, rather than
+ *   silently doing nothing when the anchor target is missing.
+ */
 export const Footer = () => {
     const currentYear = new Date().getFullYear();
 
@@ -9,37 +17,38 @@ export const Footer = () => {
         {
             title: "Product",
             links: [
-                { label: "Features", href: "#features-section" },
-                { label: "Pricing", href: "#pricing" },
-                { label: "Security", href: "#security" },
-                { label: "Roadmap", href: "#roadmap" },
+                // "features-section" id exists in Features.tsx
+                { label: "Features", href: "#features-section", disabled: false },
+                { label: "Pricing", href: "#", disabled: true },
+                { label: "Security", href: "#", disabled: true },
+                { label: "Roadmap", href: "#", disabled: true },
             ],
         },
         {
             title: "Company",
             links: [
-                { label: "About", href: "#about" },
-                { label: "Blog", href: "#blog" },
-                { label: "Careers", href: "#careers" },
-                { label: "Contact", href: "#contact" },
+                { label: "About", href: "#", disabled: true },
+                { label: "Blog", href: "#", disabled: true },
+                { label: "Careers", href: "#", disabled: true },
+                { label: "Contact", href: "#", disabled: true },
             ],
         },
         {
             title: "Legal",
             links: [
-                { label: "Privacy", href: "#privacy" },
-                { label: "Terms", href: "#terms" },
-                { label: "Cookies", href: "#cookies" },
-                { label: "Compliance", href: "#compliance" },
+                { label: "Privacy", href: "#", disabled: true },
+                { label: "Terms", href: "#", disabled: true },
+                { label: "Cookies", href: "#", disabled: true },
+                { label: "Compliance", href: "#", disabled: true },
             ],
         },
     ];
 
     const socialLinks = [
-        { icon: Github, href: "#github", label: "GitHub" },
-        { icon: Twitter, href: "#twitter", label: "Twitter" },
-        { icon: Linkedin, href: "#linkedin", label: "LinkedIn" },
-        { icon: Mail, href: "#email", label: "Email" },
+        { icon: Github, href: "https://github.com", label: "GitHub" },
+        { icon: Twitter, href: "https://twitter.com", label: "Twitter" },
+        { icon: Linkedin, href: "https://linkedin.com", label: "LinkedIn" },
+        { icon: Mail, href: "mailto:hello@kachow.dev", label: "Email" },
     ];
 
     return (
@@ -63,6 +72,8 @@ export const Footer = () => {
                                     <a
                                         key={social.label}
                                         href={social.href}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
                                         className="group relative w-10 h-10 rounded-lg flex items-center justify-center border border-border bg-card hover:border-primary/50 transition-all duration-300"
                                         aria-label={social.label}
                                     >
@@ -82,12 +93,25 @@ export const Footer = () => {
                             <ul className="space-y-3">
                                 {section.links.map((link) => (
                                     <li key={link.label}>
-                                        <a
-                                            href={link.href}
-                                            className="text-sm text-muted-foreground hover:text-primary hover:translate-x-1 inline-block transition-all duration-300"
-                                        >
-                                            {link.label}
-                                        </a>
+                                        {link.disabled ? (
+                                            <span
+                                                className="text-sm text-muted-foreground/50 cursor-default select-none inline-flex items-center gap-1"
+                                                title="Coming soon"
+                                                aria-disabled="true"
+                                            >
+                                                {link.label}
+                                                <span className="font-mono text-[9px] uppercase tracking-widest opacity-60 border border-muted-foreground/20 px-1 rounded">
+                                                    soon
+                                                </span>
+                                            </span>
+                                        ) : (
+                                            <a
+                                                href={link.href}
+                                                className="text-sm text-muted-foreground hover:text-primary hover:translate-x-1 inline-block transition-all duration-300"
+                                            >
+                                                {link.label}
+                                            </a>
+                                        )}
                                     </li>
                                 ))}
                             </ul>
@@ -103,15 +127,9 @@ export const Footer = () => {
                         </p>
 
                         <div className="flex gap-6">
-                            <a href="#privacy" className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-300">
-                                Privacy Policy
-                            </a>
-                            <a href="#terms" className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-300">
-                                Terms of Service
-                            </a>
-                            <a href="#status" className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-300">
-                                Status
-                            </a>
+                            <span className="text-sm text-muted-foreground/50 cursor-default" title="Coming soon">Privacy Policy</span>
+                            <span className="text-sm text-muted-foreground/50 cursor-default" title="Coming soon">Terms of Service</span>
+                            <span className="text-sm text-muted-foreground/50 cursor-default" title="Coming soon">Status</span>
                         </div>
                     </div>
                 </div>

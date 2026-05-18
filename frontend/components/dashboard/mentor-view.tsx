@@ -30,14 +30,16 @@ import {
 } from "lucide-react"
 
 // ─── Commit Type Config ───────────────────────────────────────────────────────
+// NOTE: rgba(var(--css-variable)) is invalid CSS because var() resolves to a
+// hex string, not an RGB triplet. Use literal hex colors with alpha instead.
 const COMMIT_TYPE: Record<string, { color: string; bg: string; label: string }> = {
-    feat: { color: "var(--primary)", bg: "rgba(var(--primary),0.15)", label: "feat" },
-    fix: { color: "var(--destructive)", bg: "rgba(var(--destructive),0.15)", label: "fix" },
-    chore: { color: "var(--muted-foreground)", bg: "rgba(var(--muted-foreground),0.12)", label: "chore" },
-    docs: { color: "var(--primary)", bg: "rgba(var(--primary),0.15)", label: "docs" },
-    refactor: { color: "var(--warning)", bg: "rgba(var(--warning),0.15)", label: "refactor" },
-    test: { color: "var(--success)", bg: "rgba(var(--success),0.15)", label: "test" },
-    other: { color: "var(--muted-foreground)", bg: "rgba(var(--muted-foreground),0.10)", label: "other" },
+    feat:     { color: "#ccff00", bg: "#ccff0026", label: "feat" },     // primary (acid yellow)
+    fix:      { color: "#ff3333", bg: "#ff333326", label: "fix" },      // destructive (red)
+    chore:    { color: "#a1a1aa", bg: "#a1a1aa1f", label: "chore" },    // muted-foreground
+    docs:     { color: "#ccff00", bg: "#ccff0026", label: "docs" },     // primary
+    refactor: { color: "#ffcc00", bg: "#ffcc0026", label: "refactor" }, // warning (amber)
+    test:     { color: "#00ff66", bg: "#00ff6626", label: "test" },     // success (green)
+    other:    { color: "#a1a1aa", bg: "#a1a1aa1a", label: "other" },    // muted-foreground
 }
 
 const ROLES = ["Backend", "Frontend", "SRE"]
@@ -131,8 +133,8 @@ function ChatMessage({ role, content }: { role: "user" | "ai"; content: string }
 
 export function MentorView() {
     // Chat
-    const [messages, setMessages] = useState<{ role: "user" | "ai"; content: string }[]>([
-        { role: "ai", content: "👋 Hey! I'm your **KA-CHOW Mentor**. Ask me anything about the codebase, architecture, or best practices. I have live SonarQube data to help guide you!" },
+    const [messages, setMessages] = useState<{ id: string; role: "user" | "ai"; content: string }[]>([
+        { id: "initial", role: "ai", content: "👋 Hey! I'm your **KA-CHOW Mentor**. Ask me anything about the codebase, architecture, or best practices. I have live SonarQube data to help guide you!" },
     ])
     const [input, setInput] = useState("")
     const [isChatLoading, setIsChatLoading] = useState(false)
@@ -187,17 +189,17 @@ export function MentorView() {
         const q = input.trim()
         if (!q || isChatLoading) return
         setInput("")
-        setMessages((prev) => [...prev, { role: "user", content: q }])
+        setMessages((prev) => [...prev, { id: `user-${Date.now()}`, role: "user", content: q }])
         setIsChatLoading(true)
         try {
             const activeRepo = getActiveRepo()
             const res: MentorChatResponse = await fetchMentorChat(q, role, activeRepo?.repo_url)
             setSonarStats(res.sonar_stats || {})
-            setMessages((prev) => [...prev, { role: "ai", content: res.answer }])
+            setMessages((prev) => [...prev, { id: `ai-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, role: "ai", content: res.answer }])
         } catch (err) {
             setMessages((prev) => [
                 ...prev,
-                { role: "ai", content: `⚠️ Error: ${(err as Error).message}` },
+                { id: `err-${Date.now()}`, role: "ai", content: `⚠️ Error: ${(err as Error).message}` },
             ])
         } finally {
             setIsChatLoading(false)
@@ -286,8 +288,8 @@ export function MentorView() {
 
                     {/* Messages */}
                     <div className="flex-1 overflow-y-auto p-6 space-y-2">
-                        {messages.map((m, i) => (
-                            <ChatMessage key={i} role={m.role} content={m.content} />
+                        {messages.map((m) => (
+                            <ChatMessage key={m.id} role={m.role} content={m.content} />
                         ))}
                         {isChatLoading && (
                             <div className="flex items-center gap-3 font-mono text-[11px] text-muted-foreground opacity-60">
@@ -321,6 +323,7 @@ export function MentorView() {
                             onClick={sendMessage}
                             disabled={!input.trim() || isChatLoading}
                             size="icon"
+                            aria-label="Send message"
                             className="h-10 w-10 shrink-0 rounded-xl bg-primary text-primary-foreground shadow-[0_0_20px_rgba(var(--primary),0.3)] transition-all hover:scale-105 active:scale-95"
                         >
                             <Send className="h-4 w-4" />

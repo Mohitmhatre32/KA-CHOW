@@ -68,7 +68,13 @@ export function HealthPanel({ onClose }: { onClose: () => void }) {
   }, [isLive, graphMeta?.repo_url])
 
   const handleSyncGithub = async () => {
-    if (!isLive || !graphMeta?.repo_url) return
+    // Bug #11 fix: explicit guard — repo_url must be present before any API call.
+    // This prevents the API from receiving `undefined` as the repo URL during
+    // repo switching or edge cases where graphMeta hasn't resolved yet.
+    if (!isLive || !graphMeta?.repo_url) {
+      console.warn("HealthPanel: Sync attempted with no active repo — ignoring.")
+      return
+    }
     setIsSyncing(true)
     try {
       const result = await syncGithub(graphMeta.repo_url)

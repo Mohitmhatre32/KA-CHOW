@@ -108,7 +108,11 @@ export default function DashboardPage() {
   }
 
   const toggleMainView = (view: MainView) => {
-    setMainView((prev) => (prev === view ? "graph" : view))
+    // Bug #10 fix: clicking the already-active agent tab is a no-op.
+    // Previously this would reset to "graph", which was confusing and destructive.
+    if (mainView !== view) {
+      setMainView(view)
+    }
   }
 
   const handleTriggerScan = async () => {

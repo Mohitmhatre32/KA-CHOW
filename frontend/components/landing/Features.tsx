@@ -4,7 +4,6 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Code2, Zap, Brain, Shield, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 
 interface FeaturesProps {
     scrollProgress: number;
@@ -14,13 +13,39 @@ export const Features = ({ scrollProgress }: FeaturesProps) => {
     const router = useRouter();
     const [isVisible, setIsVisible] = useState(false);
     const [hoveredCard, setHoveredCard] = useState<number | null>(null);
+    // Bug #3 fix: track whether the CTA button itself is visible, not a global scroll %
+    const [ctaVisible, setCtaVisible] = useState(false);
+    const ctaRef = useRef<HTMLDivElement>(null);
     const featuresRef = useRef<HTMLDivElement>(null);
 
+    // Fade-in the whole section based on scroll progress (kept for the entrance animation)
     useEffect(() => {
         if (scrollProgress > 0.3) {
             setIsVisible(true);
         }
     }, [scrollProgress]);
+
+    // Bug #3 fix: Use IntersectionObserver on the CTA container so the button
+    // unlocks as soon as the user can actually see it, regardless of viewport height.
+    useEffect(() => {
+        const el = ctaRef.current;
+        if (!el) return;
+
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                if (entry.isIntersecting) {
+                    setCtaVisible(true);
+                }
+            },
+            {
+                // Unlock when at least 40% of the CTA area is in the viewport
+                threshold: 0.4,
+            }
+        );
+
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, []);
 
     const opacity = scrollProgress > 0.3 ? Math.min(1, (scrollProgress - 0.3) / 0.3) : 0;
     const translateY = scrollProgress > 0.3 ? 0 : 50;
@@ -123,23 +148,39 @@ export const Features = ({ scrollProgress }: FeaturesProps) => {
                     })}
                 </div>
 
-                {/* Bottom CTA */}
-                <div className="text-center mt-24">
+                {/* Bottom CTA — observed by IntersectionObserver, not global scroll % */}
+                <div ref={ctaRef} className="text-center mt-24 flex flex-col items-center gap-4">
                     <Button
+                        id="launch-now-btn"
                         size="lg"
                         variant="secondary"
                         className={`h-20 px-16 text-2xl font-black uppercase tracking-widest transition-all duration-500 border-4 border-border shadow-[var(--shadow-brutal-primary)] hover:bg-primary hover:text-primary-foreground
-                        ${scrollProgress > 0.7 ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"}`}
-                        onClick={() => router.push("/import-repository")}
-                        style={{ pointerEvents: scrollProgress > 0.7 ? "auto" : "none" }}
+                        ${ctaVisible ? "opacity-100 translate-y-0" : "opacity-40 translate-y-2 cursor-not-allowed"}`}
+                        onClick={() => ctaVisible && router.push("/import-repository")}
+                        aria-label={ctaVisible ? "Launch KA-CHOW" : "Scroll down to unlock"}
+                        aria-disabled={!ctaVisible}
                     >
                         LAUNCH NOW
                         <ArrowRight className="ml-4 h-8 w-8" />
                     </Button>
+
+                    {/* Scroll-to-unlock hint — only visible before CTA is in view */}
+                    <div
+                        className={`flex items-center gap-2 transition-all duration-500 ${ctaVisible ? "opacity-0 pointer-events-none" : "opacity-100"}`}
+                        aria-hidden={ctaVisible}
+                    >
+                        <span className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+                            ↓ Keep scrolling to unlock
+                        </span>
+                        <span
+                            className="inline-block h-2 rounded-full bg-primary transition-all duration-300"
+                            style={{ width: `${Math.round(Math.min(scrollProgress / 0.7, 1) * 64)}px`, minWidth: 8 }}
+                        />
+                    </div>
                 </div>
             </div>
 
-            {/* Background geometric forms (Replacing blurred orbs) */}
+            {/* Background geometric forms */}
             <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
                 <div className="absolute top-1/4 left-1/4 w-96 h-96 border-[16px] border-primary/20 rotate-45" />
                 <div className="absolute bottom-1/4 right-1/4 w-64 h-64 border-[16px] border-secondary/20 rotate-12" />
