@@ -1,6 +1,7 @@
 """
 Librarian Router — all endpoints backed by the LibrarianService pipeline.
 """
+import os
 import traceback
 from typing import Optional, List
 from fastapi import APIRouter, HTTPException, Query
@@ -12,8 +13,27 @@ from .models import (
     SonarScanRequest, SonarScanResponse
 )
 from .service import librarian
+from app.core.config import settings
 
 router = APIRouter()
+
+
+@router.get("/indexed-repos", summary="List repos that are fully indexed on the backend")
+async def get_indexed_repos():
+    """
+    Returns the names of repositories that are cloned AND have a processed
+    knowledge graph (_kachow_graph.json) in storage/repos/.
+    The frontend uses this to prune stale localStorage entries.
+    """
+    indexed: list[str] = []
+    storage = settings.REPO_STORAGE_PATH
+    if os.path.isdir(storage):
+        for name in os.listdir(storage):
+            repo_dir = os.path.join(storage, name)
+            graph_cache = os.path.join(repo_dir, "_kachow_graph.json")
+            if os.path.isdir(repo_dir) and os.path.isfile(graph_cache):
+                indexed.append(name)
+    return {"repos": indexed}
 
 
 @router.post("/generate-docs", response_model=DocumentationResponse, summary="Generates industry-standard PROJECT_GUIDE.md")
@@ -137,10 +157,19 @@ async def incremental_update(request: IncrementalUpdateRequest):
 async def run_sonar_scan(request: SonarScanRequest):
     """
     Triggers a full SonarQube quality audit.
+    Requires the repository to be processed first via /librarian/process.
     """
     try:
         result = librarian.run_sonar_scan(request.repo_url)
         return result
+    except ValueError as e:
+        # Path not found — repo has never been cloned/processed by the backend
+        raise HTTPException(
+            status_code=400,
+            detail=f"Repository not found locally. Please process the repository first via 'Scan Repository'. ({e})"
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))

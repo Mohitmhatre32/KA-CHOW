@@ -10,14 +10,12 @@ import {
   ShieldAlert,
   GraduationCap,
   Compass,
-  Loader2,
   LayoutGrid,
   GitFork,
   MonitorPlay,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import {
   Tooltip,
@@ -31,8 +29,6 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable"
 
-// API Call
-import { triggerSonarScan, analyzeRepository } from "@/lib/api"
 
 // Dashboard Components
 import { GraphView } from "@/components/dashboard/graph-view"
@@ -44,7 +40,7 @@ import { DiagramView } from "@/components/dashboard/diagram-view"
 import { AlertsInbox } from "@/components/dashboard/alerts-inbox"
 
 // Utilities
-import { getActiveRepo, setActiveRepoId, getAllRepos, upsertRepo } from "@/lib/repo-store"
+import { getActiveRepo, setActiveRepoId, getAllRepos } from "@/lib/repo-store"
 // Neo-brutalist skeleton loader
 import { SkeletonDashboardLoader } from "@/components/ui/bone"
 
@@ -63,21 +59,11 @@ export default function DashboardPage() {
   const [mounted, setMounted] = useState(false)
   const [activeRepoName, setActiveRepoName] = useState<string | null>(null)
   const [activeRepoUrl, setActiveRepoUrl] = useState<string | null>(null)
-  const [activeRepoBranch, setActiveRepoBranch] = useState<string | null>(null)
-  const [isScanning, setIsScanning] = useState(false)
-
-  const [loadRepoUrl, setLoadRepoUrl] = useState("")
-  const [loadBranch, setLoadBranch] = useState("main")
-  const [loadForce, setLoadForce] = useState(false)
-  const [isLoadingRepo, setIsLoadingRepo] = useState(false)
 
   const refreshActiveRepo = useCallback(() => {
     const repo = getActiveRepo()
     setActiveRepoName(repo?.repo_name ?? null)
     setActiveRepoUrl(repo?.repo_url ?? null)
-    setActiveRepoBranch(repo?.data.branch ?? "main")
-    setLoadRepoUrl(repo?.repo_url ?? "")
-    setLoadBranch(repo?.data.branch ?? "main")
     // Note: we intentionally do NOT reset mainView or activePanel here.
     // Each mounted view handles its own cleanup via the active-repo-changed event,
     // so the user stays on whichever tab they were on when they switched repos.
@@ -116,39 +102,6 @@ export default function DashboardPage() {
     }
   }
 
-  const handleTriggerScan = async () => {
-    if (!activeRepoUrl) return
-    setIsScanning(true)
-    try {
-      await triggerSonarScan(activeRepoUrl)
-      // Refresh the repository data to update the graph and metrics (force=true to bust backend cache)
-      const data = await analyzeRepository(activeRepoUrl, activeRepoBranch || "main", true)
-      const newId = upsertRepo(activeRepoUrl, data)
-      setActiveRepoId(newId)
-      // Dispatch event to notify components like HealthPanel
-      window.dispatchEvent(new Event("active-repo-changed"))
-    } catch (error) {
-      console.error("Failed to trigger scan", error)
-    } finally {
-      setIsScanning(false)
-    }
-  }
-
-  const handleLoadRepo = async () => {
-    if (!loadRepoUrl) return
-    setIsLoadingRepo(true)
-    try {
-      const data = await analyzeRepository(loadRepoUrl, loadBranch, loadForce)
-      const newId = upsertRepo(loadRepoUrl, data)
-      setActiveRepoId(newId)
-      router.push(`/dashboard/${newId}`)
-    } catch (e) {
-      console.error(e)
-      alert("Error loading repo: " + (e instanceof Error ? e.message : String(e)))
-    } finally {
-      setIsLoadingRepo(false)
-    }
-  }
 
   // Show neo-brutalist skeleton until client-side mount + repo hydration completes
   if (!mounted) return <SkeletonDashboardLoader />
@@ -169,49 +122,27 @@ export default function DashboardPage() {
 
           <Separator orientation="vertical" className="h-6 hidden md:block" />
 
-          {/* INDEX.HTML DASHBOARD INPUTS */}
-          <div className="flex items-center gap-2">
-            <input 
-              type="text"
-              value={loadRepoUrl}
-              onChange={(e) => setLoadRepoUrl(e.target.value)}
-              placeholder="GitHub URL or local path…"
-              className="h-8 w-64 rounded-md border border-border bg-card px-3 text-xs font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground"
-            />
-            <input
-              type="text"
-              value={loadBranch}
-              onChange={(e) => setLoadBranch(e.target.value)}
-              placeholder="main"
-              className="h-8 w-24 rounded-md border border-border bg-card px-3 text-xs font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground"
-            />
-            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer whitespace-nowrap">
-              <input 
-                type="checkbox" 
-                checked={loadForce}
-                onChange={(e) => setLoadForce(e.target.checked)}
-                className="accent-primary"
-              />
-              Force rescan
-            </label>
-            <Button
-              size="sm"
-              onClick={handleLoadRepo}
-              disabled={isLoadingRepo || !loadRepoUrl}
-              className="h-8 bg-primary text-black font-semibold hover:bg-primary/90 hidden sm:flex"
-            >
-              {isLoadingRepo ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : "⚡ "}
-              Load
-            </Button>
-          </div>
-
+          {/* Active repo display — read-only */}
           {activeRepoName ? (
-            <div className="flex items-center gap-2 hidden lg:flex">
-              <Badge variant="outline" className="font-mono text-[10px] py-0 px-2 border-primary/30 text-primary bg-primary/5">
+            <div className="flex flex-col justify-center min-w-0">
+              <span className="text-sm font-semibold text-foreground leading-tight truncate">
                 {activeRepoName}
-              </Badge>
+              </span>
+              {activeRepoUrl && (
+                <a
+                  href={activeRepoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="truncate text-[10px] font-mono text-muted-foreground hover:text-primary transition-colors max-w-[280px]"
+                  title={activeRepoUrl}
+                >
+                  {activeRepoUrl.replace("https://github.com/", "github.com/")}
+                </a>
+              )}
             </div>
-          ) : null}
+          ) : (
+            <span className="text-xs text-muted-foreground italic">No repository loaded</span>
+          )}
         </div>
 
         <div className="flex items-center gap-2">

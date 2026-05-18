@@ -94,6 +94,17 @@ export async function getBranches(repoUrl: string): Promise<string[]> {
 }
 
 /**
+ * Returns the set of repo names that are fully indexed on the backend
+ * (cloned + _kachow_graph.json present in storage/repos/).
+ * Endpoint: GET /api/librarian/indexed-repos
+ */
+export async function getIndexedRepos(): Promise<string[]> {
+  const data = await get<{ repos: string[] }>("/api/librarian/indexed-repos")
+  return data.repos
+}
+
+
+/**
  * Clones/processes a repository and builds its knowledge graph.
  * Endpoint: POST /api/librarian/process
  */
