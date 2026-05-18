@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { getAllRepos, removeRepo, setActiveRepoId, type RepoEntry } from "@/lib/repo-store"
+import { SkeletonRepoCard, SkeletonButton, Bone } from "@/components/ui/bone"
 
 function timeAgo(isoString: string): string {
   const diff = Date.now() - new Date(isoString).getTime()
@@ -43,7 +44,7 @@ function RepoCard({ repo, onOpen, onDelete }: { repo: RepoEntry; onOpen: () => v
 
   return (
     <div
-      className="group relative flex flex-col gap-4 rounded-xl border border-border bg-card p-5 transition-all duration-200 hover:border-primary/40 hover:shadow-[0_0_24px_rgba(88,166,255,0.06)] cursor-pointer"
+      className="bone-enter group relative flex flex-col gap-4 rounded-xl border border-border bg-card p-5 transition-all duration-200 hover:border-primary/40 hover:shadow-[0_0_24px_rgba(88,166,255,0.06)] cursor-pointer"
       onClick={onOpen}
     >
       {/* Header */}
@@ -127,6 +128,52 @@ function EmptyState({ onImport }: { onImport: () => void }) {
   )
 }
 
+// ── Neo-brutalist skeleton for the repositories page ─────────────────────────
+function RepositoriesPageSkeleton() {
+  return (
+    <div className="min-h-screen bg-background" role="status" aria-label="Loading repositories">
+      {/* Top Bar */}
+      <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-border bg-background/80 px-6">
+        <div className="flex items-center gap-2.5">
+          <Bone width={28} height={28} />
+          <Bone width={80} height={14} delay={30} />
+        </div>
+        <SkeletonButton width={110} height={32} />
+      </header>
+
+      <main className="mx-auto max-w-6xl px-6 py-10">
+        {/* Page title */}
+        <div className="mb-8 flex flex-col gap-2">
+          <div className="flex items-center gap-2 mb-1">
+            <Bone width={16} height={16} delay={20} />
+            <Bone width={130} height={10} delay={40} />
+          </div>
+          <Bone width={280} height={22} delay={60} />
+          <Bone width={160} height={11} delay={80} />
+        </div>
+
+        {/* Search bar */}
+        <div className="mb-6 max-w-sm">
+          <Bone width="100%" height={36} />
+        </div>
+
+        {/* Cards grid — 6 skeleton cards (2 rows × 3 cols) */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <SkeletonRepoCard key={i} delay={i * 80} />
+          ))}
+        </div>
+
+        {/* Footer note */}
+        <div className="mt-8 flex items-center gap-2">
+          <Bone width={14} height={14} delay={200} />
+          <Bone width={220} height={10} delay={220} />
+        </div>
+      </main>
+    </div>
+  )
+}
+
 export default function RepositoriesPage() {
   const router = useRouter()
   const [repos, setRepos] = useState<RepoEntry[]>([])
@@ -141,6 +188,9 @@ export default function RepositoriesPage() {
     setMounted(true)
     load()
   }, [load])
+
+  // Show neo-brutalist skeleton until hydration is complete
+  if (!mounted) return <RepositoriesPageSkeleton />
 
   const filtered = repos.filter(
     (r) =>
@@ -159,7 +209,7 @@ export default function RepositoriesPage() {
   }
 
   return (
-    <div className={`min-h-screen bg-background transition-opacity duration-500 ${mounted ? "opacity-100" : "opacity-0"}`}>
+    <div className="min-h-screen bg-background">
       {/* Top Bar */}
       <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-border bg-background/80 px-6 backdrop-blur-sm">
         <button

@@ -58,25 +58,6 @@ const DEFAULT_JIRA_JSON = JSON.stringify(
 )
 
 
-
-// Architecture drift demo data
-const PLANNED_SERVICES = [
-    { name: "auth-service", status: "planned" as const },
-    { name: "user-service", status: "planned" as const },
-    { name: "billing-service", status: "planned" as const },
-    { name: "notification-service", status: "planned" as const },
-    { name: "gateway-api", status: "planned" as const },
-]
-
-const ACTUAL_SERVICES = [
-    { name: "auth-service", status: "match" as const },
-    { name: "user-service", status: "match" as const },
-    { name: "billing-service", status: "match" as const },
-    { name: "notification-service", status: "match" as const },
-    { name: "gateway-api", status: "match" as const },
-    { name: "analytics-worker", status: "drift" as const },
-]
-
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
 function GlowPulse({ color = "primary" }: { color?: "primary" | "destructive" | "warning" | "success" }) {
@@ -237,6 +218,7 @@ export function ArchitectView() {
     const [scaffoldLoading, setScaffoldLoading] = useState(false)
     const [scaffoldResult, setScaffoldResult] = useState<ScaffoldResponse | null>(null)
     const [scaffoldError, setScaffoldError] = useState<string | null>(null)
+    const [blueprintExpanded, setBlueprintExpanded] = useState(false)
 
     // ── File viewing state ──
     const [selectedFile, setSelectedFile] = useState<TreeNode | null>(null)
@@ -255,13 +237,31 @@ export function ArchitectView() {
     // ── Jira Sync ──
     const [jiraKeyInput, setJiraKeyInput] = useState("")
     const [isSyncingJira, setIsSyncingJira] = useState(false)
-    const [jiraSuccess, setJiraSuccess] = useState<string | null>(null)
+    // A6 FIX: separate success state per flow so they can never cross-contaminate
+    const [jiraSyncSuccess, setJiraSyncSuccess] = useState<string | null>(null)
+    const [jiraExportSuccess, setJiraExportSuccess] = useState<string | null>(null)
 
     const [appTasks, setAppTasks] = useState<AppTask[]>([])
     const [ticketSource, setTicketSource] = useState<"app" | "jira">("app")
-    const activeRepo = getActiveRepo()
 
-    // Fetch local tasks created from mobile app on load
+    // ── A5 FIX: keep activeRepo in state so repo-switches re-render the component
+    const [activeRepo, setActiveRepo] = useState(getActiveRepo)
+    useEffect(() => {
+        const onRepoChange = () => setActiveRepo(getActiveRepo())
+        window.addEventListener("active-repo-changed", onRepoChange)
+        return () => window.removeEventListener("active-repo-changed", onRepoChange)
+    }, [])
+
+    // A7 FIX: clear stale scaffold/impact when the active repo changes
+    useEffect(() => {
+        setScaffoldResult(null)
+        setSelectedFile(null)
+        setFileContent("")
+        setImpactResult(null)
+        setError(null)
+    }, [activeRepo?.repo_url])
+
+    // Fetch local tasks created from mobile app on load + repo switch
     useEffect(() => {
         if (activeRepo?.repo_name) {
             setIsSyncingJira(true)
@@ -279,20 +279,17 @@ export function ArchitectView() {
         }
         setIsSyncingJira(true)
         setError(null)
-        setJiraSuccess(null)
+        setJiraSyncSuccess(null)  // A6 FIX: only clear the sync flow's success
         try {
             const ticketData = await syncJiraTicket(jiraKeyInput.trim())
-            
-            // Format for scaffolding prompt
             const formatted = JSON.stringify({
                 ticket: ticketData.key,
                 summary: ticketData.summary,
                 status: ticketData.status,
                 description: ticketData.description
             }, null, 2)
-
             setJiraInput(formatted)
-            setJiraSuccess(`Synced ${ticketData.key}: ${ticketData.summary}`)
+            setJiraSyncSuccess(`Synced ${ticketData.key}: ${ticketData.summary}`)
         } catch (e: unknown) {
             setError(e instanceof Error ? e.message : "Jira sync failed")
         } finally {
@@ -303,15 +300,13 @@ export function ArchitectView() {
     // ── Create Tasks ──
     const handleCreateJiraTasks = useCallback(async () => {
         if (!jiraKeyInput.trim() || !impactResult) return
-        
         setExportingTasks(true)
         setError(null)
-        setJiraSuccess(null)
-        
+        setJiraExportSuccess(null)  // A6 FIX: only clear the export flow's success
         try {
             const tasks = impactResult.impacted_files.map(s => `Fix/Verify impact in ${s.file_path} [Reason: ${s.reason}]`)
             const res = await createJiraTasks(jiraKeyInput.trim(), tasks)
-            setJiraSuccess(res.message)
+            setJiraExportSuccess(res.message)
         } catch (e: unknown) {
             setError(e instanceof Error ? e.message : "Task creation failed")
         } finally {
@@ -337,8 +332,9 @@ export function ArchitectView() {
     }, [jiraInput])
 
     // ── Impact analyzer handler ──
+    // A5 FIX: reads activeRepo from state (not getActiveRepo() in closure)
+    // Also fixed: targetFile added to deps to prevent stale closure
     const handleAnalyzeImpact = useCallback(async () => {
-        const activeRepo = getActiveRepo()
         if (!activeRepo) {
             setError("Please select a repository in Librarian first to analyze impact.")
             return
@@ -348,7 +344,7 @@ export function ArchitectView() {
         setError(null)
         try {
             const result = await architectAnalyzeImpact({
-                target_endpoint: targetFile || "root", 
+                target_endpoint: targetFile || "root",
                 proposed_change: proposedChange,
                 repo_url: activeRepo.repo_url,
             })
@@ -358,7 +354,7 @@ export function ArchitectView() {
         } finally {
             setImpactLoading(false)
         }
-    }, [proposedChange])
+    }, [activeRepo, proposedChange, targetFile])
 
     // ── File select handler ──
     const handleFileSelect = useCallback(async (node: TreeNode) => {
@@ -437,7 +433,8 @@ export function ArchitectView() {
                                             onChange={() => {
                                                 setTicketSource("app")
                                                 setJiraKeyInput("")
-                                                setJiraSuccess(null)
+                                                setJiraSyncSuccess(null)
+                                                setJiraExportSuccess(null)
                                             }}
                                             className="accent-primary"
                                         />
@@ -452,7 +449,8 @@ export function ArchitectView() {
                                             onChange={() => {
                                                 setTicketSource("jira")
                                                 setJiraKeyInput("")
-                                                setJiraSuccess(null)
+                                                setJiraSyncSuccess(null)
+                                                setJiraExportSuccess(null)
                                             }}
                                             className="accent-primary"
                                         />
@@ -477,7 +475,7 @@ export function ArchitectView() {
                                                     linked_files: task.linked_nodes
                                                 }, null, 2)
                                                 setJiraInput(formatted)
-                                                setJiraSuccess(`Selected ${task.id}: ${task.title}`)
+                                                setJiraSyncSuccess(`Selected ${task.id}: ${task.title}`)
                                             }
                                         }}
                                         className="flex-1 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-1.5 font-mono text-xs text-zinc-300 outline-none focus:border-cyan-500/40"
@@ -530,8 +528,10 @@ export function ArchitectView() {
                                 </div>
                             )}
                             
-                            {jiraSuccess && (
-                                <p className="font-mono text-[10px] text-emerald-400 mt-1">{jiraSuccess}</p>
+                            {(jiraSyncSuccess || jiraExportSuccess) && (
+                                <p className="font-mono text-[10px] text-emerald-400 mt-1">
+                                    {jiraSyncSuccess || jiraExportSuccess}
+                                </p>
                             )}
                         </div>
 
@@ -645,9 +645,19 @@ export function ArchitectView() {
                                         <div className="border-t border-zinc-800/60 px-4 py-3">
                                             <p className="mb-1 font-mono text-[10px] uppercase tracking-wider text-zinc-600">Rationale</p>
                                             <p className="font-mono text-[11px] leading-relaxed text-zinc-400">
-                                                {scaffoldResult.blueprint_summary.slice(0, 300)}
-                                                {scaffoldResult.blueprint_summary.length > 300 && "…"}
+                                                {blueprintExpanded
+                                                    ? scaffoldResult.blueprint_summary
+                                                    : scaffoldResult.blueprint_summary.slice(0, 300)}
+                                                {!blueprintExpanded && scaffoldResult.blueprint_summary.length > 300 && "…"}
                                             </p>
+                                            {scaffoldResult.blueprint_summary.length > 300 && (
+                                                <button
+                                                    onClick={() => setBlueprintExpanded((v) => !v)}
+                                                    className="mt-2 font-mono text-[10px] font-bold uppercase tracking-wider text-primary/70 hover:text-primary transition-colors"
+                                                >
+                                                    {blueprintExpanded ? "↑ Show less" : "↓ Show full rationale"}
+                                                </button>
+                                            )}
                                         </div>
                                     )}
                                 </>
@@ -682,7 +692,7 @@ export function ArchitectView() {
                         {scaffoldError && (
                             <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 font-mono text-[11px] text-amber-400">
                                 <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                                {scaffoldError} — showing demo scaffold.
+                                <span><strong>Scaffold failed:</strong> {scaffoldError} — check that the backend is running and retry.</span>
                             </div>
                         )}
                     </div>
@@ -886,103 +896,174 @@ export function ArchitectView() {
                 </div>
 
                 {/* ══════════════════════════════════════════════════════════════
-                       SECTION 3: ARCHITECTURE DRIFT & SONARQUBE QUALITY
+                       SECTION 3: ARCHITECTURE DRIFT & SONARQUBE QUALITY (A3+A4 FIX)
+                       Data is now derived from the live repo graph — no hardcoded values.
                    ══════════════════════════════════════════════════════════════ */}
-                <div className="space-y-4">
-                    <div className="flex items-center gap-2">
-                        <GitMerge className="h-4 w-4 text-zinc-500" />
-                        <span className="font-mono text-xs font-semibold uppercase tracking-widest text-zinc-500">
-                            Architecture Drift &amp; Clean Architecture Enforcement
-                        </span>
-                    </div>
+                {(() => {
+                    const repoData = activeRepo?.data
+                    const allNodes = repoData?.nodes ?? []
 
-                    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+                    // Derive top-level module names (unique first path segment)
+                    const moduleNames = Array.from(
+                        new Set(
+                            allNodes
+                                .filter(n => n.id.includes("/"))
+                                .map(n => n.id.split("/")[0])
+                        )
+                    ).slice(0, 8) // cap at 8 for readability
 
-                        {/* ── Left: Planned vs Actual ── */}
-                        <div
-                            className="rounded-xl border border-border p-5 bg-card/30 backdrop-blur-sm"
-                        >
-                            <p className="mb-4 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground opacity-60">Planned Blueprint vs Current Implementation</p>
+                    // Nodes that have poor sonar gate are "drift" candidates
+                    const driftModules = new Set(
+                        allNodes
+                            .filter(n => {
+                                const gate = n.sonar_health?.quality_gate as string | undefined
+                                return gate && gate !== "PASSED" && gate !== "OK"
+                            })
+                            .map(n => n.id.split("/")[0])
+                    )
 
-                            <div className="grid grid-cols-2 gap-4">
-                                {/* Planned */}
-                                <div>
-                                    <p className="mb-2 font-mono text-[10px] uppercase tracking-wider text-zinc-600">
-                                        <span className="inline-flex items-center gap-1"><Box className="h-3 w-3" /> Planned</span>
+                    // Aggregate sonar metrics across all nodes with data
+                    let totalBugs = 0, totalSmells = 0, totalDup = 0, sonarNodeCount = 0
+                    allNodes.forEach(n => {
+                        if (n.sonar_health && Object.keys(n.sonar_health).length > 0) {
+                            totalBugs   += (n.sonar_health.bugs as number) ?? 0
+                            totalSmells += (n.sonar_health.code_smells as number) ?? 0
+                            totalDup    += (n.sonar_health.duplications as number) ?? 0
+                            sonarNodeCount++
+                        }
+                    })
+                    const avgDup = sonarNodeCount > 0 ? (totalDup / sonarNodeCount).toFixed(1) : null
+                    const overallGatePass = totalBugs === 0 && totalSmells < 5
+                    const hasLiveData = allNodes.length > 0
+
+                    return (
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-2">
+                                <GitMerge className="h-4 w-4 text-zinc-500" />
+                                <span className="font-mono text-xs font-semibold uppercase tracking-widest text-zinc-500">
+                                    Architecture Drift &amp; Clean Architecture Enforcement
+                                </span>
+                                {hasLiveData && (
+                                    <span className="rounded-full border border-success/30 bg-success/5 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-widest text-success">
+                                        Live
+                                    </span>
+                                )}
+                            </div>
+
+                            {!hasLiveData ? (
+                                <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-border bg-card/30 py-12 text-center">
+                                    <GitMerge className="h-8 w-8 text-muted-foreground/20" />
+                                    <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/50">
+                                        No repository loaded
                                     </p>
-                                    <div className="space-y-1.5">
-                                        {PLANNED_SERVICES.map((s, i) => (
-                                            <DriftServiceCard key={i} name={s.name} status={s.status} />
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* Actual */}
-                                <div>
-                                    <p className="mb-2 font-mono text-[10px] uppercase tracking-wider text-zinc-600">
-                                        <span className="inline-flex items-center gap-1"><Zap className="h-3 w-3" /> Actual</span>
+                                    <p className="font-mono text-[9px] text-muted-foreground/40 italic">
+                                        Scan a repository in the Librarian tab to see real drift analysis.
                                     </p>
-                                    <div className="space-y-1.5">
-                                        {ACTUAL_SERVICES.map((s, i) => (
-                                            <DriftServiceCard key={i} name={s.name} status={s.status} />
-                                        ))}
-                                    </div>
                                 </div>
-                            </div>
-
-                            {/* Drift callout */}
-                            <div className="mt-4 flex items-center gap-2 rounded-lg border border-warning/25 bg-warning/5 px-3 py-2.5">
-                                <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
-                                <p className="font-mono text-[10px] font-bold uppercase tracking-tight text-warning leading-none">
-                                    Architecture Drift Detected: <span className="opacity-70 font-medium">&quot;analytics-worker&quot; was not in the original blueprint.</span>
-                                </p>
-                            </div>
-                        </div>
-
-                        {/* ── Right: SonarQube Architecture Metrics ── */}
-                        <div
-                            className="flex flex-col gap-4 rounded-xl border border-border p-5 bg-card/30 backdrop-blur-sm"
-                        >
-                            <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground opacity-60">SonarQube Architectural Health</p>
-
-                            {/* Metric cards */}
-                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                                {/* Code Smells */}
-                                <div className="rounded-xl border border-warning/25 bg-warning/5 p-4">
-                                    <p className="mb-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground opacity-60">Structural Code Smells</p>
-                                    <p className="font-mono text-2xl font-bold text-warning">8</p>
-                                    <p className="mt-0.5 font-mono text-[9px] uppercase tracking-tighter text-warning opacity-50">Needs attention</p>
-                                </div>
-
-                                {/* Duplication */}
-                                <div className="rounded-xl border border-destructive/25 bg-destructive/5 p-4">
-                                    <p className="mb-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground opacity-60">Duplication Density</p>
-                                    <p className="font-mono text-2xl font-bold text-destructive">14%</p>
-                                    <p className="mt-0.5 font-mono text-[9px] uppercase tracking-tighter text-destructive opacity-50">Violates DRY Principle</p>
-                                </div>
-                            </div>
-
-                            {/* Gate status */}
-                            <div className="mt-auto">
-                                <div
-                                    className="flex items-center gap-4 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 backdrop-blur-md shadow-[inset_0_0_40px_rgba(var(--destructive),0.05)]"
-                                >
-                                    <XCircle className="h-6 w-6 text-destructive" />
-                                    <div>
-                                        <p className="font-mono text-[9px] uppercase tracking-widest text-destructive/70">SonarQube Clean Architecture Gate</p>
-                                        <p className="font-mono text-lg font-black tracking-tight text-destructive">
-                                            FAILED
+                            ) : (
+                                <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+                                    {/* ── Left: Module Drift ── */}
+                                    <div className="rounded-xl border border-border p-5 bg-card/30 backdrop-blur-sm">
+                                        <p className="mb-4 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground opacity-60">
+                                            Detected Modules — {activeRepo?.repo_name}
                                         </p>
+
+                                        {moduleNames.length === 0 ? (
+                                            <p className="font-mono text-[10px] text-muted-foreground/50 italic">No modules detected in graph.</p>
+                                        ) : (
+                                            <div className="space-y-1.5">
+                                                {moduleNames.map((name, i) => (
+                                                    <DriftServiceCard
+                                                        key={i}
+                                                        name={name}
+                                                        status={driftModules.has(name) ? "drift" : "match"}
+                                                    />
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        {driftModules.size > 0 && (
+                                            <div className="mt-4 flex items-center gap-2 rounded-lg border border-warning/25 bg-warning/5 px-3 py-2.5">
+                                                <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
+                                                <p className="font-mono text-[10px] font-bold uppercase tracking-tight text-warning leading-none">
+                                                    Drift Detected:{" "}
+                                                    <span className="opacity-70 font-medium">
+                                                        {Array.from(driftModules).join(", ")} failed the SonarQube quality gate.
+                                                    </span>
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        {driftModules.size === 0 && (
+                                            <div className="mt-4 flex items-center gap-2 rounded-lg border border-success/25 bg-success/5 px-3 py-2.5">
+                                                <CheckCircle className="h-4 w-4 shrink-0 text-success" />
+                                                <p className="font-mono text-[10px] font-bold uppercase tracking-tight text-success leading-none">
+                                                    No drift — all modules match quality gates.
+                                                </p>
+                                            </div>
+                                        )}
                                     </div>
-                                    <div className="ml-auto">
-                                        <GlowPulse color="destructive" />
+
+                                    {/* ── Right: Live SonarQube Aggregate ── */}
+                                    <div className="flex flex-col gap-4 rounded-xl border border-border p-5 bg-card/30 backdrop-blur-sm">
+                                        <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground opacity-60">
+                                            {sonarNodeCount > 0
+                                                ? `SonarQube Architectural Health — ${sonarNodeCount} of ${allNodes.length} nodes analysed`
+                                                : "SonarQube Architectural Health — no scan data yet"}
+                                        </p>
+
+                                        {sonarNodeCount === 0 ? (
+                                            <div className="flex flex-col items-center gap-2 py-6 text-center">
+                                                <p className="font-mono text-[10px] text-muted-foreground/50 uppercase tracking-widest">Run a Sonar Scan to see real metrics</p>
+                                                <p className="font-mono text-[9px] text-muted-foreground/40 italic">Use the “🔍 Sonar Scan” button in the Knowledge Graph toolbar.</p>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                                    <div className={`rounded-xl border p-4 ${ totalSmells > 0 ? "border-warning/25 bg-warning/5" : "border-success/25 bg-success/5" }`}>
+                                                        <p className="mb-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground opacity-60">Structural Code Smells</p>
+                                                        <p className={`font-mono text-2xl font-bold ${ totalSmells > 0 ? "text-warning" : "text-success" }`}>{totalSmells}</p>
+                                                        <p className={`mt-0.5 font-mono text-[9px] uppercase tracking-tighter opacity-50 ${ totalSmells > 0 ? "text-warning" : "text-success" }`}>
+                                                            {totalSmells > 10 ? "Needs attention" : totalSmells > 0 ? "Minor issues" : "Clean"}
+                                                        </p>
+                                                    </div>
+                                                    <div className={`rounded-xl border p-4 ${ avgDup && parseFloat(avgDup) > 10 ? "border-destructive/25 bg-destructive/5" : "border-success/25 bg-success/5" }`}>
+                                                        <p className="mb-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground opacity-60">Avg Duplication Density</p>
+                                                        <p className={`font-mono text-2xl font-bold ${ avgDup && parseFloat(avgDup) > 10 ? "text-destructive" : "text-success" }`}>{avgDup ? `${avgDup}%` : "0%"}</p>
+                                                        <p className={`mt-0.5 font-mono text-[9px] uppercase tracking-tighter opacity-50 ${ avgDup && parseFloat(avgDup) > 10 ? "text-destructive" : "text-success" }`}>
+                                                            {avgDup && parseFloat(avgDup) > 10 ? "Violates DRY Principle" : "Within acceptable range"}
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                <div className="mt-auto">
+                                                    <div className={`flex items-center gap-4 rounded-xl border px-4 py-3 backdrop-blur-md ${ overallGatePass ? "border-success/30 bg-success/5" : "border-destructive/30 bg-destructive/5" }`}>
+                                                        {overallGatePass
+                                                            ? <CheckCircle className="h-6 w-6 text-success" />
+                                                            : <XCircle className="h-6 w-6 text-destructive" />}
+                                                        <div>
+                                                            <p className={`font-mono text-[9px] uppercase tracking-widest ${ overallGatePass ? "text-success/70" : "text-destructive/70" }`}>
+                                                                SonarQube Clean Architecture Gate
+                                                            </p>
+                                                            <p className={`font-mono text-lg font-black tracking-tight ${ overallGatePass ? "text-success" : "text-destructive" }`}>
+                                                                {overallGatePass ? "PASSED" : "FAILED"}
+                                                            </p>
+                                                        </div>
+                                                        <div className="ml-auto">
+                                                            <GlowPulse color={overallGatePass ? "success" : "destructive"} />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
                                 </div>
-                            </div>
+                            )}
                         </div>
-                    </div>
-                </div>
+                    )
+                })()}
             </div>
         </div>
     )
 }
+

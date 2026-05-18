@@ -49,6 +49,9 @@
   
   --success: #00ff66;
   --warning: #ffcc00;
+
+  /* Guardian badge background (semi-transparent destructive) */
+  --destructive-muted: rgba(255,51,51,0.10);
 }
 
 @theme inline {
@@ -212,3 +215,55 @@
 .duration-\[10000ms\] { animation-duration: 10s; }
 .duration-\[20000ms\] { animation-duration: 20s; }
 .duration-\[40000ms\] { animation-duration: 40s; }
+
+/* =========================================
+   GRAPH VIEW ANIMATIONS
+   Moved from graph-view.tsx <style jsx> which
+   is incompatible with Next.js App Router.
+   ========================================= */
+@keyframes marching-ants { to { stroke-dashoffset: 16; } }
+
+.animated-edge {
+  animation: marching-ants 1s linear infinite;
+}
+
+/* Thin scrollbar for node detail card */
+.card-scroll::-webkit-scrollbar       { width: 4px; }
+.card-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+
+/* =========================================
+   NEO-BRUTALIST SKELETON SYSTEM (boneyard)
+   No shimmer. No gradients. Fast + punchy.
+   ========================================= */
+
+/* stamp — hard opacity blink, easing: none (brutalist) */
+@keyframes bone-stamp {
+  0%,  100% { opacity: 1;    }
+  45%, 55%  { opacity: 0.25; }
+}
+
+/* tick — fast sequential bounce for 3-dot loader */
+@keyframes bone-tick {
+  0%,  80%, 100% { transform: scale(1);    opacity: 0.4; }
+  40%            { transform: scale(1.4);  opacity: 1;   }
+}
+
+/* enter — fade + slam down when real content replaces skeleton */
+@keyframes bone-enter {
+  0%   { opacity: 0; transform: translateY(-4px); }
+  100% { opacity: 1; transform: translateY(0);    }
+}
+
+.bone-stamp {
+  animation: bone-stamp 1.1s steps(1, end) infinite;
+}
+
+.bone-tick {
+  display: inline-block;
+  animation: bone-tick 1.1s ease-in-out infinite;
+}
+
+.bone-enter {
+  animation: bone-enter 0.18s ease-out both;
+}
+

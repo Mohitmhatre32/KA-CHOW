@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 import {
     ShieldAlert,
     CheckCircle,
@@ -212,11 +212,24 @@ function FileSelectorPanel({
     isLoading: boolean
 }) {
     const [open, setOpen] = useState(false)
+    const wrapperRef = useRef<HTMLDivElement>(null)
     const fileNodes = nodes.filter((n) => n.type === "file")
+
+    // Bug #7 fix: close dropdown on click-outside
+    useEffect(() => {
+        if (!open) return
+        const handler = (e: MouseEvent) => {
+            if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+                setOpen(false)
+            }
+        }
+        document.addEventListener("mousedown", handler)
+        return () => document.removeEventListener("mousedown", handler)
+    }, [open])
 
     return (
         <div className="flex items-center gap-3">
-            <div className="relative">
+            <div className="relative" ref={wrapperRef}>
                 <button
                     onClick={() => setOpen((v) => !v)}
                     className="flex items-center gap-2 rounded-lg border border-zinc-700/60 bg-zinc-900/80 px-3 py-2 font-mono text-xs text-zinc-300 transition-all hover:border-zinc-600 max-w-xs"
@@ -325,7 +338,11 @@ export function GuardianView() {
         if (!selectedFilePath) return
         setFileLoadingState("loading")
         setError(null)
-        // Reset review when loading a new file
+        // GD5 FIX: reset stale save-toast / saveState from a previous session
+        // so they don’t re-surface when a new file is loaded.
+        setShowSaveToast(false)
+        setSaveState("idle")
+        // Reset review state when loading a new file
         setViewState("idle")
         setReviewResult(null)
         setHealedCode(null)
@@ -356,6 +373,17 @@ export function GuardianView() {
         }
     }, [selectedFilePath, projectRoot])
 
+    // ── Audit-log refresh (GD6 FIX: callable from handleReview too) ──────────
+    const refreshAuditLogs = useCallback(async () => {
+        try {
+            const { getGuardianAuditLogs } = await import("@/lib/api")
+            const logs = await getGuardianAuditLogs()
+            setAuditLogs(logs)
+        } catch (err) {
+            console.error("Failed to refresh audit logs:", err)
+        }
+    }, [])
+
     // ── Review handler ────────────────────────────────────────────────────────
     const handleReview = useCallback(async () => {
         setViewState("reviewing")
@@ -367,12 +395,16 @@ export function GuardianView() {
             })
             setReviewResult(result)
             setViewState("reviewed")
+            // GD6 FIX: auto-refresh audit log so the new entry appears immediately
+            refreshAuditLogs()
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : "Backend unavailable."
             setError(`Review failed: ${msg}`)
-            setViewState("idle") // Don't show demo data by default if real backend fails
+            setViewState("idle")
+            // Still refresh — backend may have logged the failed attempt
+            refreshAuditLogs()
         }
-    }, [activeCode, activeFileName])
+    }, [activeCode, activeFileName, refreshAuditLogs])
 
     // ── Heal handler ──────────────────────────────────────────────────────────
     const handleHeal = useCallback(async () => {
@@ -416,31 +448,38 @@ export function GuardianView() {
                 content: healedCode,
                 project_key: repoName,
             })
-            // Update activeCode to the newly-saved content
+            // Update activeCode to the newly-saved content so the left pane
+            // reflects the file that was written to disk (GD4 fix)
             setActiveCode(healedCode)
             setHealedCode(null)
             setHealMessage("")
             setSaveState("saved")
-            setViewState("idle")
-            // Show success toast, auto-dismiss after 3 s
+            // ✅ GD4 FIX: Do NOT call setViewState("idle") here.
+            // Keep the diff visible so the user can verify what was saved.
+            // They can click Reset when they are satisfied.
             setShowSaveToast(true)
             setTimeout(() => setShowSaveToast(false), 3000)
 
             // ── Re-scan the repo so the knowledge graph reflects the saved file ──
-            const activeRepo = getActiveRepo()
-            if (activeRepo?.repo_url) {
+            // GD7 FIX: snapshot selectedFilePath at call-time so the async
+            // rescan doesn’t use a stale path if the user picks a new file
+            // while analyzeRepository is in-flight.
+            const savedFilePath = selectedFilePath
+            const activeRepoSnap = getActiveRepo()
+            if (activeRepoSnap?.repo_url) {
                 try {
                     const freshGraph = await analyzeRepository(
-                        activeRepo.repo_url,
-                        activeRepo.data?.branch ?? "main"
+                        activeRepoSnap.repo_url,
+                        activeRepoSnap.data?.branch ?? "main"
                     )
-                    upsertRepo(activeRepo.repo_url, freshGraph)
-                    // Update guardian's own file list
-                    setRepoNodes(freshGraph.nodes)
-                    // Notify GraphView and other listeners to re-render
+                    upsertRepo(activeRepoSnap.repo_url, freshGraph)
+                    // Only update repoNodes if the user hasn’t switched files
+                    // (selectedFilePath could have changed while we awaited)
+                    if (savedFilePath === selectedFilePath) {
+                        setRepoNodes(freshGraph.nodes)
+                    }
                     window.dispatchEvent(new Event("active-repo-changed"))
                 } catch {
-                    // Re-scan failure is non-fatal — graph may be slightly stale
                     console.warn("Guardian: graph re-scan failed after save")
                 }
             }
@@ -534,15 +573,22 @@ export function GuardianView() {
                         </div>
 
                         <div className="flex gap-2">
+                            {/* Always visible — disabled with tooltip hint when no file is loaded (GD1 fix) */}
                             {viewState === "idle" && (
                                 <Button
                                     onClick={handleReview}
                                     disabled={!hasFile}
                                     variant="outline"
-                                    className="gap-2 font-mono text-xs border-border bg-card/50 hover:bg-muted transition-all"
+                                    title={!hasFile ? (hasRepo ? "Select and load a file above first" : "Scan a repo in the Librarian tab first") : "Run Guardian quality gate review"}
+                                    className="gap-2 font-mono text-xs border-border bg-card/50 hover:bg-muted transition-all disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     <ShieldAlert className="h-3.5 w-3.5" />
                                     Run CI/CD Review
+                                    {!hasFile && (
+                                        <span className="ml-1 rounded bg-muted px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">
+                                            {hasRepo ? "load file first" : "no repo"}
+                                        </span>
+                                    )}
                                 </Button>
                             )}
                             {viewState !== "idle" && (
@@ -812,7 +858,8 @@ export function GuardianView() {
                                     </span>
                                 </div>
 
-                                {viewState !== "healed" && (
+                                {/* GD8 FIX: Only show "Run Healing" if the review actually found issues */}
+                                {viewState !== "healed" && isBlocked && (
                                     <Button
                                         onClick={handleHeal}
                                         disabled={viewState === "healing"}
@@ -829,10 +876,22 @@ export function GuardianView() {
                                     </Button>
                                 )}
 
+                                {/* When review PASSED: show positive status instead of a healing CTA */}
+                                {viewState === "reviewed" && !isBlocked && (
+                                    <div className="flex items-center gap-2 rounded-xl border border-success/30 bg-success/5 px-4 py-2.5">
+                                        <CheckCircle className="h-4 w-4 text-success" />
+                                        <span className="font-mono text-xs text-success">Review passed — no issues found, ready to merge</span>
+                                    </div>
+                                )}
+
                                 {viewState === "healed" && (
-                                    <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/8 px-4 py-2.5">
-                                        <CheckCircle className="h-4 w-4 text-emerald-400" />
-                                        <span className="font-mono text-xs text-emerald-300">{healMessage}</span>
+                                    <div className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 ${saveState === "saved" ? "border-primary/30 bg-primary/5" : "border-emerald-500/30 bg-emerald-500/8"}`}>
+                                        <CheckCircle className={`h-4 w-4 ${saveState === "saved" ? "text-primary" : "text-emerald-400"}`} />
+                                        <span className={`font-mono text-xs ${saveState === "saved" ? "text-primary" : "text-emerald-300"}`}>
+                                            {saveState === "saved"
+                                                ? "Saved to disk ✓ — review the diff above, then click Reset"
+                                                : healMessage}
+                                        </span>
                                     </div>
                                 )}
                             </div>
@@ -998,15 +1057,7 @@ export function GuardianView() {
                             variant="ghost"
                             size="sm"
                             className="h-8 gap-2 font-mono text-[10px] text-muted-foreground hover:text-foreground"
-                            onClick={async () => {
-                                try {
-                                    const { getGuardianAuditLogs } = await import("@/lib/api")
-                                    const logs = await getGuardianAuditLogs()
-                                    setAuditLogs(logs)
-                                } catch (err) {
-                                    console.error("Manual refresh failed:", err)
-                                }
-                            }}
+                            onClick={refreshAuditLogs}
                         >
                             <RefreshCw className="h-3 w-3" />
                             Refresh Log
@@ -1028,7 +1079,13 @@ export function GuardianView() {
                                     auditLogs.map((log, i) => (
                                         <tr key={i} className="group border-b border-zinc-900 transition-colors hover:bg-zinc-800/30">
                                             <td className="whitespace-nowrap px-5 py-3 font-mono text-[10px] text-zinc-500">
-                                                {new Date(log.timestamp).toLocaleTimeString()}
+                                                {(() => {
+                                                    const d = new Date(log.timestamp)
+                                                    // Show full date + time so logs from different days are unambiguous (GD3 fix)
+                                                    const date = d.toLocaleDateString(undefined, { month: "short", day: "numeric" })
+                                                    const time = d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+                                                    return `${date}, ${time}`
+                                                })()}
                                             </td>
                                             <td className="px-5 py-3">
                                                 <div className="flex items-center gap-2">

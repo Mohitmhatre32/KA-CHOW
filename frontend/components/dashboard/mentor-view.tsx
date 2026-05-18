@@ -27,6 +27,8 @@ import {
     Send,
     Loader2,
     Terminal,
+    GitCommit,
+    Clock,
 } from "lucide-react"
 
 // ─── Commit Type Config ───────────────────────────────────────────────────────
@@ -156,23 +158,41 @@ export function MentorView() {
     const [selectedCommit, setSelectedCommit] = useState<TimelineEvent | null>(null)
     const [timelineLoading, setTimelineLoading] = useState(true)
 
-    // ── Effects ────────────────────────────────────────────────────────────────
+    // \u2500\u2500 M6 FIX: track activeRepo reactively so quest/timeline re-fetch on repo switch
+    const [activeRepo, setActiveRepoState] = useState(getActiveRepo)
     useEffect(() => {
-        const activeRepo = getActiveRepo()
-        const repoUrl = activeRepo?.repo_url
+        const onRepoChange = () => setActiveRepoState(getActiveRepo())
+        window.addEventListener("active-repo-changed", onRepoChange)
+        return () => window.removeEventListener("active-repo-changed", onRepoChange)
+    }, [])
 
+    // ── Effects ────────────────────────────────────────────────────────────────
+    // Quest re-fetches whenever the active repo changes (M6 fix)
+    useEffect(() => {
+        const repoUrl = activeRepo?.repo_url
+        setQuestLoading(true)
         getDailyQuest(repoUrl)
             .then(setQuest)
             .catch(() => setQuest(null))
             .finally(() => setQuestLoading(false))
+    }, [activeRepo?.repo_url])
 
+    // Timeline re-fetches whenever the active repo changes (M6 fix)
+    useEffect(() => {
+        const repoUrl = activeRepo?.repo_url
+        setTimelineLoading(true)
+        setTimeline([])
+        setSelectedCommit(null)
         getArchitectureTimeline(repoUrl)
             .then((data) => { setTimeline(data); if (data.length) setSelectedCommit(data[0]) })
             .catch(() => setTimeline([]))
             .finally(() => setTimelineLoading(false))
-    }, [])
+    }, [activeRepo?.repo_url])
 
     useEffect(() => {
+        // M4 FIX: reset checkedIds whenever the role changes so check marks
+        // from one role never bleed over to another role's step list.
+        setCheckedIds(new Set())
         setOnboardingLoading(true)
         getOnboardingPath(role)
             .then(setOnboarding)
@@ -191,8 +211,10 @@ export function MentorView() {
         setInput("")
         setMessages((prev) => [...prev, { id: `user-${Date.now()}`, role: "user", content: q }])
         setIsChatLoading(true)
+        // M5 FIX: clear stale sonarStats immediately so the badge doesn't show
+        // data from the last answer while a new question is loading.
+        setSonarStats({})
         try {
-            const activeRepo = getActiveRepo()
             const res: MentorChatResponse = await fetchMentorChat(q, role, activeRepo?.repo_url)
             setSonarStats(res.sonar_stats || {})
             setMessages((prev) => [...prev, { id: `ai-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, role: "ai", content: res.answer }])
@@ -226,7 +248,6 @@ export function MentorView() {
         boxShadow: "0 0 18px rgba(99,102,241,0.12), inset 0 1px 0 rgba(255,255,255,0.04)",
     }
 
-    // ── Render ─────────────────────────────────────────────────────────────────
     // ── Render ─────────────────────────────────────────────────────────────────
     return (
         <div className="h-full overflow-y-auto bg-background/50 p-6 scrollbar-hide">
@@ -334,10 +355,8 @@ export function MentorView() {
                 {/* ── RIGHT COLUMN ── */}
                 <div className="flex flex-col gap-6">
 
-                    {/* Quest Card */}
-                    {/* <div
-                        className="rounded-2xl border border-warning/30 bg-warning/5 p-5 backdrop-blur-sm shadow-[inset_0_0_40px_rgba(var(--warning),0.05)]"
-                    >
+                    {/* ── Quest Card (M1 FIX: uncommented + wired to live data) ── */}
+                    <div className="rounded-2xl border border-warning/30 bg-warning/5 p-5 backdrop-blur-sm shadow-[inset_0_0_40px_rgba(var(--warning),0.05)]">
                         <div className="mb-4 flex items-center gap-2">
                             <Sword className="h-5 w-5 text-warning" />
                             <span className="font-mono text-sm font-black uppercase tracking-widest text-warning">Daily Quest</span>
@@ -364,9 +383,7 @@ export function MentorView() {
                                         {quest.issue_description}
                                     </p>
                                 </div>
-                                <div
-                                    className="flex items-center gap-2 rounded-lg border border-border bg-background/50 px-3 py-2 font-mono text-[10px] text-muted-foreground"
-                                >
+                                <div className="flex items-center gap-2 rounded-lg border border-border bg-background/50 px-3 py-2 font-mono text-[10px] text-muted-foreground">
                                     <Terminal className="h-3.5 w-3.5 opacity-60" />
                                     {quest.file_path}
                                 </div>
@@ -375,21 +392,19 @@ export function MentorView() {
                                     variant="outline"
                                     className="w-full h-10 gap-2 border-warning/40 font-mono text-[10px] font-black uppercase tracking-widest text-warning hover:bg-warning/10"
                                 >
-                                    <a
-                                        href={quest.sonar_link}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                    >
+                                    <a href={quest.sonar_link} target="_blank" rel="noopener noreferrer">
                                         Fix on SonarQube <Send className="h-3 w-3" />
                                     </a>
                                 </Button>
                             </div>
                         ) : (
-                            <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground opacity-60">No quest available.</div>
+                            <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground opacity-60">
+                                No quest available — run a Sonar Scan to generate one.
+                            </div>
                         )}
-                    </div> */}
+                    </div>
 
-                    {/* Onboarding Checklist */}
+                    {/* ── Onboarding Checklist ── */}
                     <div className="flex flex-1 flex-col rounded-2xl border border-border bg-card/30 p-5 backdrop-blur-md">
                         <div className="mb-4 flex items-center justify-between">
                             <div className="flex items-center gap-2">
@@ -450,14 +465,79 @@ export function MentorView() {
                 </div>
             </div>
 
+            {/* ── Architecture Timeline (M2 FIX: now rendered) ── */}
+            <div className="mt-6 rounded-2xl border border-border bg-card/30 p-5 backdrop-blur-md">
+                <div className="mb-4 flex items-center gap-3">
+                    <GitCommit className="h-5 w-5 text-primary" />
+                    <span className="font-mono text-sm font-black uppercase tracking-widest text-foreground">Architecture Timeline</span>
+                    {timeline.length > 0 && (
+                        <Badge variant="outline" className="ml-auto border-primary/30 bg-primary/5 font-mono text-[9px] text-primary">
+                            {timeline.length} commits
+                        </Badge>
+                    )}
+                </div>
 
-            {/* ── Keyframe styles ── */}
-            <style>{`
-        ::-webkit-scrollbar { width: 4px; height: 4px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(var(--primary), 0.2); border-radius: 4px; }
-        .scrollbar-hide::-webkit-scrollbar { display: none; }
-      `}</style>
+                {timelineLoading ? (
+                    <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground opacity-60">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Fetching commit history…
+                    </div>
+                ) : timeline.length === 0 ? (
+                    <div className="flex flex-col items-center gap-2 py-8 text-center">
+                        <GitCommit className="h-8 w-8 text-muted-foreground/20" />
+                        <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/50">No timeline data</p>
+                        <p className="font-mono text-[9px] text-muted-foreground/40 italic">Select a repo with a commit history to see architectural changes over time.</p>
+                    </div>
+                ) : (
+                    <div className="relative">
+                        {/* Vertical rail */}
+                        <div className="absolute left-[19px] top-0 h-full w-px bg-border/50" />
+                        <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
+                            {timeline.map((event, i) => {
+                                const ct = COMMIT_TYPE[event.type] ?? COMMIT_TYPE.other
+                                const isSelected = selectedCommit?.sha === event.sha
+                                return (
+                                    <button
+                                        key={event.sha}
+                                        onClick={() => setSelectedCommit(isSelected ? null : event)}
+                                        className={`group flex w-full items-start gap-3 rounded-xl border px-3 py-2.5 text-left transition-all duration-200 ${
+                                            isSelected
+                                                ? "border-primary/40 bg-primary/5"
+                                                : "border-transparent hover:border-border hover:bg-muted/20"
+                                        }`}
+                                    >
+                                        {/* Dot */}
+                                        <div
+                                            className="relative z-10 mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full"
+                                            style={{ background: ct.bg, border: `1px solid ${ct.color}40` }}
+                                        >
+                                            <div className="h-1.5 w-1.5 rounded-full" style={{ background: ct.color }} />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 mb-0.5">
+                                                <span
+                                                    className="rounded px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider"
+                                                    style={{ color: ct.color, background: ct.bg }}
+                                                >
+                                                    {ct.label}
+                                                </span>
+                                                <span className="font-mono text-[10px] font-semibold text-foreground truncate flex-1">
+                                                    {event.message}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-2 font-mono text-[9px] text-muted-foreground/60">
+                                                <Clock className="h-3 w-3" />
+                                                <span>{new Date(event.date).toLocaleDateString()} · {event.author}</span>
+                                                <span className="ml-auto font-mono text-[8px] opacity-40">{event.sha.slice(0, 7)}</span>
+                                            </div>
+                                        </div>
+                                    </button>
+                                )
+                            })}
+                        </div>
+                    </div>
+                )}
+            </div>
         </div>
     )
 }

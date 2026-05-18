@@ -1,21 +1,23 @@
 "use client"
 
-import { useState, useRef, useCallback, useEffect, useMemo } from "react"
+import React, { useState, useRef, useCallback, useEffect, useMemo } from "react"
 import * as d3 from "d3"
 import type { GraphNode } from "@/lib/demo-data"
 import { useGraphData } from "@/hooks/use-graph-data"
 import {
   Box, LayoutTemplate, Wrench, Cloud, Anchor, Activity,
   ShieldCheck, Bug, Zap, Percent, MessageSquareQuote, X, FileCode,
-  AlertCircle, Loader2, RefreshCcw, Folder, Flame, Copy, Sparkles, Search, type LucideProps,
+  AlertCircle, RefreshCcw, Folder, Flame, Copy, Sparkles, Search, type LucideProps,
 } from "lucide-react"
 import { toast } from "sonner"
 import { 
   generateIndustryDocs, 
   incrementalUpdate, 
   triggerSonarScan,
+  getRepoTasks,
   type DocumentationResponse, 
-  type IncrementalUpdateResult 
+  type IncrementalUpdateResult,
+  type RepoTask,
 } from "@/lib/api"
 import { getActiveRepo } from "@/lib/repo-store"
 import { Button } from "@/components/ui/button"
@@ -47,11 +49,64 @@ const typeIcons: Record<GraphNode["type"], React.FC<LucideProps>> = {
   file: FileCode, folder: Folder,
 }
 
+// ── JiraTicketCell ────────────────────────────────────────────────────
+// G3 FIX: Jira ticket is now clickable — copies key to clipboard and opens URL
+function JiraTicketCell({ ticket }: { ticket?: string }) {
+  const [copied, setCopied] = useState(false)
+  const jiraBase = process.env.NEXT_PUBLIC_JIRA_BASE_URL
+
+  const handleClick = () => {
+    if (!ticket) return
+    navigator.clipboard.writeText(ticket).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+    if (jiraBase) {
+      window.open(`${jiraBase}/browse/${ticket}`, "_blank", "noopener,noreferrer")
+    }
+  }
+
+  return (
+    <div
+      className={`flex flex-col rounded border border-border bg-secondary/20 p-1.5 min-w-0 transition-all duration-150 ${
+        ticket ? "cursor-pointer hover:border-primary/40 hover:bg-primary/5" : "opacity-50"
+      }`}
+      onClick={handleClick}
+      title={ticket ? (jiraBase ? `Open ${ticket} in Jira` : `Copy ${ticket}`) : undefined}
+    >
+      <div className="flex items-center gap-1 text-muted-foreground">
+        <MessageSquareQuote className="h-2.5 w-2.5 shrink-0" />
+        <span className="text-[7px] font-bold uppercase truncate">Jira</span>
+        {ticket && (
+          <span className="ml-auto text-[7px] text-primary opacity-60">
+            {copied ? "✓ copied" : jiraBase ? "↗" : "copy"}
+          </span>
+        )}
+      </div>
+      <span className={`mt-0.5 font-mono text-[9px] font-bold truncate ${
+        copied ? "text-success" : ticket ? "text-foreground" : "text-muted-foreground"
+      }`}>
+        {ticket ?? "None"}
+      </span>
+    </div>
+  )
+}
+
+
+
 export function GraphView() {
   const svgRef = useRef<SVGSVGElement>(null)
   const simRef = useRef<d3.Simulation<any, undefined> | null>(null)
 
   const [viewBox, setViewBox] = useState({ x: 0, y: 0, w: 1000, h: 800 })
+  // G7 FIX: mirror viewBox in a ref so the auto-zoom closure always reads
+  // the current value, not the stale one captured at the time of the click.
+  const viewBoxRef = useRef({ x: 0, y: 0, w: 1000, h: 800 })
+  const setViewBoxSynced = useCallback((next: { x: number; y: number; w: number; h: number }) => {
+    viewBoxRef.current = next
+    setViewBox(next)
+  }, [])
+
   const [isPanning, setIsPanning] = useState(false)
   const [panStart, setPanStart] = useState({ x: 0, y: 0 })
   const [hoveredNode, setHoveredNode] = useState<string | null>(null)
@@ -71,7 +126,7 @@ export function GraphView() {
   const [incrementalResult, setIncrementalResult] = useState<IncrementalUpdateResult | null>(null)
 
   // Mobile Task Integration
-  const [activeTasks, setActiveTasks] = useState<any[]>([])
+  const [activeTasks, setActiveTasks] = useState<RepoTask[]>([])
   const [maintenanceNodes, setMaintenanceNodes] = useState<Set<string>>(new Set())
 
   const { nodes: rawNodes, graphMeta, isLive, isRefreshing, refresh } = useGraphData()
@@ -116,39 +171,43 @@ export function GraphView() {
   // --- Mobile Tasks Polling ---
   useEffect(() => {
     if (!graphMeta?.repo_name) return
-    let mounted = true
+
+    // G5 + G6 FIX: clear stale state from the previous repo immediately,
+    // before the first fetch resolves, so old halos and benchmark pills vanish.
+    setActiveTasks([])
+    setMaintenanceNodes(new Set())
+    setIncrementalResult(null)
+    setSelectedNodeId(null)
+
+    let isMounted = true
 
     const fetchTasks = async () => {
       try {
-        // Needs absolute URL if running outside Next.js API domain, or relative if proxied.
-        const activeRepo = getActiveRepo()
-        // If we can construct the backend URL easily, we just use localhost:8000 or the same origin.
-        // For simplicity in the app, we assume backend is on port 8000.
-        const res = await fetch(`http://localhost:8000/api/tasks/${graphMeta.repo_name}`)
-        if (res.ok && mounted) {
-          const tasks = await res.json()
-          setActiveTasks(tasks)
-          
-          const mNodes = new Set<string>()
-          tasks.forEach((t: any) => {
-            if (t.status === 'open' && t.linked_nodes) {
-              t.linked_nodes.forEach((n: string) => mNodes.add(n))
-            }
-          })
-          setMaintenanceNodes(mNodes)
-        }
+        const tasks = await getRepoTasks(graphMeta.repo_name)
+        if (!isMounted) return
+        setActiveTasks(tasks)
+
+        const mNodes = new Set<string>()
+        tasks.forEach((t) => {
+          if (t.status === "open" && t.linked_nodes) {
+            t.linked_nodes.forEach((n) => mNodes.add(n))
+          }
+        })
+        setMaintenanceNodes(mNodes)
       } catch (e) {
-        console.error("Failed to fetch active tasks", e)
+        // Tasks endpoint is optional — fail silently
+        console.warn("Tasks polling failed:", (e as Error).message)
       }
     }
 
     fetchTasks()
     const intervalId = setInterval(fetchTasks, 3000)
     return () => {
-      mounted = false
+      isMounted = false
       clearInterval(intervalId)
     }
   }, [graphMeta?.repo_name])
+
 
   const edges = useMemo(() => {
     const lines: any[] = []
@@ -171,11 +230,15 @@ export function GraphView() {
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault()
       const scale = e.deltaY > 0 ? 1.05 : 0.95
-      setViewBox((prev) => ({
-        ...prev, w: prev.w * scale, h: prev.h * scale,
-        x: prev.x + (prev.w - prev.w * scale) / 2,
-        y: prev.y + (prev.h - prev.h * scale) / 2,
-      }))
+      setViewBox((prev) => {
+        const next = {
+          ...prev, w: prev.w * scale, h: prev.h * scale,
+          x: prev.x + (prev.w - prev.w * scale) / 2,
+          y: prev.y + (prev.h - prev.h * scale) / 2,
+        }
+        viewBoxRef.current = next
+        return next
+      })
     }
 
     svg.addEventListener("wheel", handleWheel, { passive: false })
@@ -188,7 +251,11 @@ export function GraphView() {
     if (!rect) return
     const dx = (panStart.x - e.clientX) * (viewBox.w / rect.width)
     const dy = (panStart.y - e.clientY) * (viewBox.h / rect.height)
-    setViewBox((prev) => ({ ...prev, x: prev.x + dx, y: prev.y + dy }))
+    setViewBox((prev) => {
+      const next = { ...prev, x: prev.x + dx, y: prev.y + dy }
+      viewBoxRef.current = next
+      return next
+    })
     setPanStart({ x: e.clientX, y: e.clientY })
   }, [isPanning, panStart, viewBox])
 
@@ -197,9 +264,10 @@ export function GraphView() {
   const selectedNode = selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) : null
 
   // Auto-zoom to selected node
+  // G7 FIX: reads start position from viewBoxRef (always current) instead of
+  // the stale viewBox closure value captured when selectedNodeId changed.
   useEffect(() => {
     if (selectedNode && selectedNode.x !== undefined && selectedNode.y !== undefined) {
-      // Find bounding box for node + connected edges to properly zoom
       let minX = selectedNode.x
       let maxX = selectedNode.x
       let minY = selectedNode.y
@@ -220,11 +288,8 @@ export function GraphView() {
       const targetX = minX - padding
       const targetY = minY - padding
 
-      // Smooth zoom transition
-      const startX = viewBox.x
-      const startY = viewBox.y
-      const startW = viewBox.w
-      const startH = viewBox.h
+      // Capture start from ref — always the real current viewBox, not stale closure
+      const { x: startX, y: startY, w: startW, h: startH } = viewBoxRef.current
 
       let startTime: number | null = null
       const duration = 600
@@ -232,23 +297,22 @@ export function GraphView() {
       const animateZoom = (timestamp: number) => {
         if (!startTime) startTime = timestamp
         const progress = Math.min((timestamp - startTime) / duration, 1)
-        // easeInOutCubic
         const ease = progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2
 
-        setViewBox({
+        const next = {
           x: startX + (targetX - startX) * ease,
           y: startY + (targetY - startY) * ease,
           w: startW + (targetW - startW) * ease,
           h: startH + (targetH - startH) * ease,
-        })
-
-        if (progress < 1) {
-          requestAnimationFrame(animateZoom)
         }
+        setViewBoxSynced(next)
+
+        if (progress < 1) requestAnimationFrame(animateZoom)
       }
       requestAnimationFrame(animateZoom)
     }
-  }, [selectedNodeId]) // Only re-run when selection changes
+  }, [selectedNodeId, edges, setViewBoxSynced])
+
 
   const handleIncrementalUpdate = async () => {
     const activeRepo = getActiveRepo()
@@ -418,12 +482,7 @@ export function GraphView() {
           </div>
         ))}
       </div>
-      <style jsx>{`
-        @keyframes marching-ants { to { stroke-dashoffset: 16; } }
-        .animated-edge { animation: marching-ants 1s linear infinite; }
-        .card-scroll::-webkit-scrollbar { width: 4px; }
-        .card-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
-      `}</style>
+
 
       <svg
         ref={svgRef}
@@ -581,17 +640,7 @@ export function GraphView() {
                       </div>
                       <span className="mt-0.5 font-mono text-[9px] font-bold text-foreground truncate">{selectedNode.owner || "Unknown"}</span>
                     </div>
-                    <div className="flex flex-col rounded border border-border bg-secondary/20 p-1.5 min-w-0">
-                      <div className="flex items-center gap-1 text-muted-foreground">
-                        <MessageSquareQuote className="h-2.5 w-2.5 shrink-0" />
-                        <span className="text-[7px] font-bold uppercase truncate">Jira</span>
-                      </div>
-                      <span className="mt-0.5 font-mono text-[9px] font-bold text-foreground truncate">
-                        {(selectedNode.jira_tickets && selectedNode.jira_tickets.length > 0) 
-                          ? selectedNode.jira_tickets[0] 
-                          : "None"}
-                      </span>
-                    </div>
+                    <JiraTicketCell ticket={selectedNode.jira_tickets?.[0]} />
                   </div>
 
                   {/* Metrics Grid */}
@@ -627,9 +676,14 @@ export function GraphView() {
                   </div>
                 </>
               ) : (
-                <div className="flex flex-col items-center justify-center p-6 text-center">
-                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground/30 mb-2" />
-                  <p className="text-[10px] text-muted-foreground italic">Fetching insights from Librarian...</p>
+                <div className="flex flex-col items-center justify-center p-6 text-center gap-2">
+                  <ShieldCheck className="h-7 w-7 text-muted-foreground/20" />
+                  <p className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest">
+                    No SonarQube data
+                  </p>
+                  <p className="text-[9px] text-muted-foreground/40 italic leading-relaxed">
+                    Run a Sonar Scan from the toolbar above to populate health metrics for this node.
+                  </p>
                 </div>
               )}
             </div>

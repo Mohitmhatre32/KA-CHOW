@@ -558,3 +558,20 @@ export interface DiagramResponse {
 export async function generateArchitectureDiagram(req: DiagramRequest): Promise<DiagramResponse> {
   return post<DiagramResponse>("/api/diagram/generate", req)
 }
+
+// ─── Mobile Task Integration ───────────────────────────────────────────────────
+
+export interface RepoTask {
+  id: string
+  status: "open" | "closed" | "in-progress"
+  title?: string
+  linked_nodes?: string[]
+}
+
+/**
+ * Fetches active tasks linked to a specific repository's knowledge graph nodes.
+ * Endpoint: GET /api/tasks/{repo_name}
+ */
+export async function getRepoTasks(repoName: string): Promise<RepoTask[]> {
+  return get<RepoTask[]>(`/api/tasks/${repoName}`)
+}
