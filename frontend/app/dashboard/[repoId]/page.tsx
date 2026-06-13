@@ -352,28 +352,40 @@ function AgentTab({
   variant?: "primary" | "destructive" | "accent"
 }) {
   const variantStyles = {
-    primary: active ? "border-primary/30 bg-primary/10 text-primary" : "text-muted-foreground",
-    destructive: active ? "border-destructive/30 bg-destructive/10 text-destructive" : "text-muted-foreground",
-    accent: active ? "border-accent/30 bg-accent/10 text-accent" : "text-muted-foreground",
+    primary: active 
+      ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15" 
+      : "text-muted-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/20",
+    destructive: active 
+      ? "border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/15" 
+      : "text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/20",
+    accent: active 
+      ? "border-accent/30 bg-accent/10 text-accent hover:bg-accent/15" 
+      : "text-muted-foreground hover:bg-accent/10 hover:text-accent hover:border-accent/20",
   }
 
   const iconStyles = {
-    primary: active ? "border-primary/40 bg-primary/15 text-primary" : "border-border bg-card/50",
-    destructive: active ? "border-destructive/40 bg-destructive/15 text-destructive" : "border-border bg-card/50",
-    accent: active ? "border-accent/40 bg-accent/15 text-accent-foreground" : "border-border bg-card/50",
+    primary: active 
+      ? "border-primary/40 bg-primary/15 text-primary" 
+      : "border-border bg-card/50 text-muted-foreground group-hover:border-primary/40 group-hover:bg-primary/15 group-hover:text-primary",
+    destructive: active 
+      ? "border-destructive/40 bg-destructive/15 text-destructive" 
+      : "border-border bg-card/50 text-muted-foreground group-hover:border-destructive/40 group-hover:bg-destructive/15 group-hover:text-destructive",
+    accent: active 
+      ? "border-accent/40 bg-accent/15 text-accent-foreground" 
+      : "border-border bg-card/50 text-muted-foreground group-hover:border-accent/40 group-hover:bg-accent/15 group-hover:text-accent",
   }
 
   return (
     <button
       onClick={onClick}
-      className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 transition-all duration-200 border border-transparent hover:bg-secondary/50 ${variantStyles[variant]}`}
+      className={`group flex w-full items-center gap-2.5 rounded-lg px-3 py-2 transition-all duration-200 border border-transparent ${variantStyles[variant]}`}
     >
       <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition-colors ${iconStyles[variant]}`}>
         <Icon className="h-3.5 w-3.5" />
       </div>
       <div className="min-w-0 flex-1 text-left">
         <p className={`truncate text-[11px] font-bold ${active ? "" : "text-foreground"}`}>{title}</p>
-        <p className="truncate font-mono text-[9px] opacity-60 uppercase tracking-tighter">{subtitle}</p>
+        <p className="truncate font-mono text-[9px] opacity-60 uppercase tracking-tighter transition-opacity group-hover:opacity-85">{subtitle}</p>
       </div>
     </button>
   )
